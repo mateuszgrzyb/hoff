@@ -1,0 +1,21 @@
+[package]
+name = "testlang"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[build-dependencies]
+lalrpop = "0.19.8"
+
+[dependencies]
+clap = { version = "4.0.29", features = ["derive"] }
+inkwell = { git = "https://github.com/TheDan64/inkwell", features = ["llvm11-0"], branch = "master" }
+lalrpop-util = { version = "0.19.8", features = ["lexer"] }
+nom = "7.1.1"
+nom-regex = "0.2.0"
+regex = "1.7.0"
+
+[dev-dependencies]
+rstest = "0.16.0"
