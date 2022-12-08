@@ -173,7 +173,6 @@ impl<'ctx> CodeGen<'ctx> {
             float: context.f32_type(),
             bool: context.bool_type(),
         };
-        let int = context.i32_type();
         let parent_basic_block = None;
         let codegen = Self {
             context,

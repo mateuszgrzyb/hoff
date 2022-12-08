@@ -1,7 +1,6 @@
 mod ast;
 mod cli;
 mod codegen;
-mod old_parser;
 mod parser;
 
 use crate::ast::Mod;
