@@ -148,7 +148,7 @@ mod test {
     fn test_parse_binop_adv(
         expr_parser: ExprParser,
         #[case] binop_text: &str,
-        #[case] exp_binop_ast: Expr,
+        #[case] exp_binop_ast: UntypedExpr,
     ) {
         // when
         let binop_ast = expr_parser.parse(binop_text).unwrap();
@@ -160,15 +160,16 @@ mod test {
     #[rstest]
     fn test_parse_fun() {
         // given
-        let fn_text = r#"fun name (a, b, c) { 33 }"#;
+        let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
         let exp_fn_ast = Fun {
             name: "name".to_string(),
             args: Vec::from([
-                "a".to_string(),
-                "b".to_string(),
-                "c".to_string(),
+                ("a".to_string(), "Int".to_string()),
+                ("b".to_string(), "Int".to_string()),
+                ("c".to_string(), "Int".to_string()),
             ]),
-            body: (Expr::Lit(Lit::Num(33))),
+            rt: "Int".to_string(),
+            body: (Expr::Lit(Lit::Int(33))),
         };
 
         // when
@@ -183,47 +184,54 @@ mod test {
         // given
         let text = r#"
 
-        fun f (a) { 1 }
+        fun f (a: Int): Int { 1 }
 
-        fun g(b, c) { 2 }
+        fun g(b:Int, c: Int): Int { 2 }
 
-        fun h (d, e, f){ 3 }
+        fun h (d: Int, e: Int, f: Int): Int{ 3 }
 
-        fun i (a, b, c) { a }
+        fun i (a: Int, b: Int, c: Int): Int { a }
 
         "#;
         let name = "main.hff".to_string();
         let exp_ast = Mod {
             name: "main.hff".to_string(),
-            funs: Vec::from([
-                Fun {
+            decls: Vec::from([
+                Decl::Fun(Fun {
                     name: "f".to_string(),
-                    args: Vec::from(["a".to_string()]),
-                    body: (Expr::Lit(Lit::Num(1))),
-                },
-                Fun {
+                    args: Vec::from([("a".to_string(), "Int".to_string())]),
+                    rt: "Int".to_string(),
+                    body: (Expr::Lit(Lit::Int(1))),
+                }),
+                Decl::Fun(Fun {
                     name: "g".to_string(),
-                    args: Vec::from(["b".to_string(), "c".to_string()]),
-                    body: (Expr::Lit(Lit::Num(2))),
-                },
-                Fun {
+                    args: Vec::from([
+                        ("b".to_string(), "Int".to_string()),
+                        ("c".to_string(), "Int".to_string()),
+                    ]),
+                    rt: "Int".to_string(),
+                    body: (Expr::Lit(Lit::Int(2))),
+                }),
+                Decl::Fun(Fun {
                     name: "h".to_string(),
                     args: Vec::from([
-                        "d".to_string(),
-                        "e".to_string(),
-                        "f".to_string(),
+                        ("d".to_string(), "Int".to_string()),
+                        ("e".to_string(), "Int".to_string()),
+                        ("f".to_string(), "Int".to_string()),
                     ]),
-                    body: (Expr::Lit(Lit::Num(3))),
-                },
-                Fun {
+                    rt: "Int".to_string(),
+                    body: (Expr::Lit(Lit::Int(3))),
+                }),
+                Decl::Fun(Fun {
                     name: "i".to_string(),
                     args: Vec::from([
-                        "a".to_string(),
-                        "b".to_string(),
-                        "c".to_string(),
+                        ("a".to_string(), "Int".to_string()),
+                        ("b".to_string(), "Int".to_string()),
+                        ("c".to_string(), "Int".to_string()),
                     ]),
+                    rt: "Int".to_string(),
                     body: (Expr::Value("a".to_string())),
-                },
+                }),
             ]),
         };
 
@@ -231,6 +239,6 @@ mod test {
         let ast = ModParser::new().parse(text).unwrap();
 
         // then
-        assert_eq!(ast, exp_ast.funs)
+        assert_eq!(ast, exp_ast.decls)
     }
 }

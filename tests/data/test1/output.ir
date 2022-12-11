@@ -1,0 +1,24 @@
+; ModuleID = 'tests/data/test1/input.hff'
+source_filename = "tests/data/test1/input.hff.ir"
+
+declare i32 @puts(i8*)
+
+define i32 @fibo(i32 %n) {
+entry:
+  %alloca = alloca i32, align 4
+  store i32 %n, i32* %alloca, align 4
+  %ilt = icmp slt i32 %n, 2
+  %sub = sub i32 %n, 1
+  %call = call i32 @fibo(i32 %sub)
+  %sub1 = sub i32 %n, 2
+  %call2 = call i32 @fibo(i32 %sub1)
+  %add = add i32 %call, %call2
+  %select = select i1 %ilt, i32 %n, i32 %add
+  ret i32 %select
+}
+
+define i32 @main() {
+entry:
+  %call = call i32 @fibo(i32 3)
+  ret i32 %call
+}

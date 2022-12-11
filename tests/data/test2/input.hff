@@ -1,0 +1,11 @@
+
+fun outer (i: Int, j: Int): Int {
+    fun inner (k: Int): Int {
+        i + j + k
+    };
+    inner (3)
+}
+
+fun main (): Int {
+    outer(3, 4)
+}
