@@ -16,6 +16,7 @@ match {
     ",", ":",
     "(", ")",
     "{", "}",
+    "->",
     "=",
     "*", "/", "+", "-",
     ";",
@@ -111,6 +112,8 @@ Expr9: UntypedExpr = {
 pub Expr: UntypedExpr = {
     "if" <be:Expr> "{" <e1:Expr9> "}" "else" "{" <e2:Expr9> "}"
         => Expr::If(Box::new(be), Box::new(e1), Box::new(e2)),
+    <id:Id> "->" <attr:Id>
+        => Expr::Attr(id, (), attr),
     <Expr9>,
 };
 

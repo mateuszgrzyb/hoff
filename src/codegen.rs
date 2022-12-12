@@ -11,7 +11,8 @@ use inkwell::types::{
     PointerType, StructType,
 };
 use inkwell::values::{
-    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue,
+    AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum,
+    FunctionValue,
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
@@ -32,10 +33,11 @@ pub struct CodeGen<'ctx> {
     pub builder: Builder<'ctx>,
     pub parent_basic_block: Option<BasicBlock<'ctx>>,
     pub types: Types<'ctx>,
-    pub structs: HashMap<String, StructType<'ctx>>,
+    pub structs: HashMap<String, (TypedStruct, StructType<'ctx>)>,
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     pub values: HashMap<String, BasicValueEnum<'ctx>>,
-    pub closures: HashMap<String, Vec<(String, BasicValueEnum<'ctx>)>>,
+    pub closure: HashMap<String, BasicValueEnum<'ctx>>,
+    pub closures: HashMap<String, Vec<String>>,
     pub current_function: Option<FunctionValue<'ctx>>,
 }
 
@@ -89,6 +91,7 @@ impl<'ctx> CodeGen<'ctx> {
             structs: HashMap::new(),
             functions,
             values: HashMap::new(),
+            closure: HashMap::new(),
             closures: HashMap::new(),
             current_function: None,
         })
@@ -131,6 +134,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .structs
                 .get(&*s.name)
                 .unwrap()
+                .1
                 .ptr_type(AddressSpace::Generic)
                 .into(),
         }
@@ -176,7 +180,6 @@ impl<'ctx> CodeGen<'ctx> {
             .chain(closure.clone())
             .map(|(n, t)| (n, self.get_type(&t).into()))
             .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
-        //.collect::<Vec<BasicMetadataTypeEnum>>();
 
         let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
 
@@ -191,24 +194,21 @@ impl<'ctx> CodeGen<'ctx> {
         let parent_basic_block = self.parent_basic_block.clone();
         self.builder.position_at_end(basic_block);
 
-        for ((n, t), p) in f.args.into_iter().zip(function.get_param_iter()) {
+        for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
             p.set_name(n.as_str());
-            let alloca = self
-                .builder
-                .build_alloca::<BasicTypeEnum>(self.get_type(&t), "alloca");
-            self.builder.build_store(alloca, p);
-            self.values.insert(n.clone(), p);
+            if closure.clone().into_iter().any(|(n1, _)| &n1 == n) {
+                self.closure.insert(n.clone(), p);
+            } else {
+                self.values.insert(n.clone(), p);
+            }
         }
 
-        let closure = closure
-            .into_iter()
-            .map(|(n, _)| -> (String, BasicValueEnum) {
-                (n.clone(), *self.values.get(&*n).unwrap())
-            })
-            .collect();
         // register closure
 
-        self.closures.insert(f.name.clone(), closure);
+        self.closures.insert(
+            f.name.clone(),
+            closure.into_iter().map(|(n, _)| n).collect(),
+        );
 
         self.parent_basic_block = Some(basic_block);
 
@@ -230,8 +230,9 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn compile_struct(&mut self, struct_: TypedStruct) {
-        let name = struct_.name;
+        let name = struct_.clone().name;
         let args = struct_
+            .clone()
             .args
             .into_iter()
             .map(|(_, t)| self.get_type(&t))
@@ -240,7 +241,7 @@ impl<'ctx> CodeGen<'ctx> {
         let s = self.context.opaque_struct_type(name.as_str());
         s.set_body(&args[..], true);
 
-        self.structs.insert(name, s);
+        self.structs.insert(name, (struct_.clone(), s));
     }
 
     fn compile_expr(&mut self, e: TypedExpr) -> Value<'ctx> {
@@ -255,6 +256,7 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Function(f, closure) => self.compile_fun(*f, closure),
             Expr::Call(name, args) => self.compile_call(name, args),
             Expr::If(be, e1, e2) => self.compile_if(*be, *e1, *e2),
+            Expr::Attr(name, t, attr) => self.compile_attr(name, t, attr),
         }
     }
 
@@ -273,7 +275,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let result = match op {
                     Op::And => self.builder.build_and(lh, rh, "and"),
                     Op::Or => self.builder.build_or(lh, rh, "and"),
-                    _ => panic!(""),
+                    _ => panic!("Invalid state"),
                 };
                 result.as_basic_value_enum()
             }
@@ -380,10 +382,11 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn compile_value(&self, name: String) -> Value<'ctx> {
-        *self
-            .values
-            .get(name.as_str())
-            .unwrap_or_else(|| panic!("unknown value {name}"))
+        *self.closure.get(name.as_str()).unwrap_or(
+            self.values
+                .get(name.as_str())
+                .unwrap_or_else(|| panic!("unknown value {name}")),
+        )
     }
 
     fn compile_assign(
@@ -409,13 +412,21 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Value<'ctx> {
         let f = *self.functions.get(name.as_str()).unwrap();
         let closure = self.closures.get(&*name).unwrap().clone();
-        let standard_args =
-            args.into_iter().map(|a| self.compile_expr(a).into());
-        //.collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
-        let closure = closure.into_iter().map(|(_, c)| c.into());
+
+        let standard_args = args
+            .into_iter()
+            .map(|a| self.compile_expr(a).into())
+            .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+
+        let closure = closure
+            .into_iter()
+            .map(|n| (*self.values.get(&*n).unwrap()).into())
+            .collect::<Vec<_>>();
 
         let args = standard_args
-            .chain(closure)
+            .clone()
+            .into_iter()
+            .chain(closure.clone())
             .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
         self.builder
@@ -436,6 +447,33 @@ impl<'ctx> CodeGen<'ctx> {
         let e2 = self.compile_expr(e2);
         self.builder
             .build_select(be.into_int_value(), e1, e2, "select")
+    }
+
+    fn compile_attr(
+        &self,
+        name: String,
+        t: TypedStruct,
+        attr: String,
+    ) -> Value<'ctx> {
+        let ptr = self.values.get(&*name).unwrap().into_pointer_value();
+
+        let (i, (_, t)) = t
+            .args
+            .into_iter()
+            .enumerate()
+            .find(|(i, (a, _))| a == &attr)
+            .unwrap();
+        let attr_ptr = self
+            .builder
+            .build_struct_gep(ptr, i as u32, "attr")
+            .unwrap();
+
+        match t {
+            Type::Fun(_, _) | Type::Struct(_) => {
+                attr_ptr.as_basic_value_enum()
+            }
+            _ => self.builder.build_load(attr_ptr, "load"),
+        }
     }
 }
 

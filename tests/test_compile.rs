@@ -15,6 +15,7 @@ fn cli() -> Command {
 #[rstest]
 #[case("tests/data/test1/input.hff", "tests/data/test1/output.ir")]
 #[case("tests/data/test2/input.hff", "tests/data/test2/output.ir")]
+#[case("tests/data/test3/input.hff", "tests/data/test3/output.ir")]
 fn test_compile(
     mut cli: Command,
     #[case] input_file: String,
@@ -27,7 +28,6 @@ fn test_compile(
     // when
     let output = cli
         .arg(input_file)
-        .arg("--no-verify-llvm")
         .output()
         .expect("Failed to execute command");
 
@@ -36,8 +36,6 @@ fn test_compile(
     let stdout = stdout.trim_end_matches("\n");
     let stderr = String::from_utf8(output.stderr).unwrap();
 
-    println!("{stdout}");
-
-    assert!(stderr.is_empty());
-    assert_eq!(stdout, expected_output)
+    assert_eq!(stderr, "");
+    assert_eq!(stdout, expected_output);
 }

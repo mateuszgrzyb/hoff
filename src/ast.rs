@@ -30,30 +30,31 @@ pub enum Lit {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Expr<T, C> {
-    BinOp(Box<Expr<T, C>>, Op, Box<Expr<T, C>>),
+pub enum Expr<T, C, S> {
+    BinOp(Box<Expr<T, C, S>>, Op, Box<Expr<T, C, S>>),
     Lit(Lit),
     Value(String),
-    Function(Box<Fun<T, C>>, C),
-    Assign((String, T), Box<Expr<T, C>>),
-    Chain(Box<Expr<T, C>>, Box<Expr<T, C>>),
-    Call(String, Vec<Expr<T, C>>),
-    If(Box<Expr<T, C>>, Box<Expr<T, C>>, Box<Expr<T, C>>),
+    Function(Box<Fun<T, C, S>>, C),
+    Assign((String, T), Box<Expr<T, C, S>>),
+    Chain(Box<Expr<T, C, S>>, Box<Expr<T, C, S>>),
+    Call(String, Vec<Expr<T, C, S>>),
+    If(Box<Expr<T, C, S>>, Box<Expr<T, C, S>>, Box<Expr<T, C, S>>),
+    Attr(String, S, String),
 }
 
-pub type UntypedExpr = Expr<String, ()>;
-pub type TypedExpr = Expr<Type, Closure>;
+pub type UntypedExpr = Expr<String, (), ()>;
+pub type TypedExpr = Expr<Type, Closure, TypedStruct>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Fun<T, C> {
+pub struct Fun<T, C, S> {
     pub name: String,
     pub args: Vec<(String, T)>,
     pub rt: T,
-    pub body: Expr<T, C>,
+    pub body: Expr<T, C, S>,
 }
 
-pub type UntypedFun = Fun<String, ()>;
-pub type TypedFun = Fun<Type, Closure>;
+pub type UntypedFun = Fun<String, (), ()>;
+pub type TypedFun = Fun<Type, Closure, TypedStruct>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Struct<T> {
@@ -65,22 +66,22 @@ pub type UntypedStruct = Struct<String>;
 pub type TypedStruct = Struct<Type>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Decl<T, C> {
-    Fun(Fun<T, C>),
+pub enum Decl<T, C, S> {
+    Fun(Fun<T, C, S>),
     Struct(Struct<T>),
 }
 
-pub type UntypedDecl = Decl<String, ()>;
-pub type TypedDecl = Decl<Type, Closure>;
+pub type UntypedDecl = Decl<String, (), ()>;
+pub type TypedDecl = Decl<Type, Closure, TypedStruct>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Mod<T, C> {
+pub struct Mod<T, C, S> {
     pub name: String,
-    pub decls: Vec<Decl<T, C>>,
+    pub decls: Vec<Decl<T, C, S>>,
 }
 
-pub type UntypedMod = Mod<String, ()>;
-pub type TypedMod = Mod<Type, Closure>;
+pub type UntypedMod = Mod<String, (), ()>;
+pub type TypedMod = Mod<Type, Closure, TypedStruct>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type {

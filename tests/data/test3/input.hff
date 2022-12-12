@@ -1,0 +1,17 @@
+
+type Student {
+    name: String,
+    age: Int
+}
+
+fun get_name (s: Student): String {
+    s -> name
+}
+
+fun get_age (s: Student): Int {
+    s -> age
+}
+
+fun main (): Int {
+    33
+}

@@ -1,0 +1,25 @@
+; ModuleID = 'tests/data/test3/input.hff'
+source_filename = "tests/data/test3/input.hff.ir"
+
+%Student = type <{ i8*, i32 }>
+
+declare i32 @puts(i8*)
+
+define i8* @get_name(%Student* %s) {
+entry:
+  %attr = getelementptr inbounds %Student, %Student* %s, i32 0, i32 0
+  %load = load i8*, i8** %attr, align 8
+  ret i8* %load
+}
+
+define i32 @get_age(%Student* %s) {
+entry:
+  %attr = getelementptr inbounds %Student, %Student* %s, i32 0, i32 1
+  %load = load i32, i32* %attr, align 4
+  ret i32 %load
+}
+
+define i32 @main() {
+entry:
+  ret i32 33
+}

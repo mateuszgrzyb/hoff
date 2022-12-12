@@ -6,6 +6,7 @@ use crate::ast::{
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 
 pub struct CheckError {
     message: String,
@@ -50,6 +51,8 @@ pub struct Typechecker {
     pub functions: HashMap<String, (Vec<Type>, Type)>,
     pub types: HashMap<String, Vec<(String, Type)>>,
     pub closure: Vec<(String, Type)>,
+    pub nested_name: Vec<String>,
+    pub qualified_names: HashMap<String, String>,
 }
 
 impl Typechecker {
@@ -62,6 +65,26 @@ impl Typechecker {
             )]),
             types: HashMap::new(),
             closure: Vec::new(),
+            nested_name: Vec::new(),
+            qualified_names: Default::default(),
+        }
+    }
+
+    fn get_type(&self, s: String) -> Result<Type, CheckError> {
+        match s.as_str() {
+            "Int" => Ok(Type::Int),
+            "Bool" => Ok(Type::Bool),
+            "Float" => Ok(Type::Float),
+            "String" => Ok(Type::String),
+            s => {
+                let Some(t) = self.types.get(s) else {
+                    return CheckError::from_message(format!("Unknown type: {s}"))
+                };
+                Ok(Type::Struct(Struct {
+                    name: s.to_string(),
+                    args: (*t).clone(),
+                }))
+            }
         }
     }
 
@@ -93,7 +116,9 @@ impl Typechecker {
     }
 
     fn typecheck_fun(&mut self, f: UntypedFun) -> CheckResult<TypedFun> {
-        let name = f.name;
+        self.nested_name.push(f.name.clone());
+        let name = self.nested_name.join(".");
+        self.qualified_names.insert(f.name, name.clone());
         let args = self.typecheck_fun_args(f.args)?;
         let rt = self.get_type(f.rt)?;
 
@@ -110,6 +135,8 @@ impl Typechecker {
         );
 
         let body = self.typecheck_expr(f.body)?;
+
+        self.nested_name.pop();
 
         if rt != body.t {
             return CheckError::from_message(format!(
@@ -179,6 +206,7 @@ impl Typechecker {
             }
             Expr::Call(name, args) => self.typecheck_call(name, args),
             Expr::If(be, e1, e2) => self.typecheck_if(*be, *e1, *e2),
+            Expr::Attr(name, _, attr) => self.typecheck_attr(name, attr),
         }
     }
 
@@ -294,7 +322,8 @@ impl Typechecker {
             .into_iter()
             .map(|TypedValue { v, t }| (v, t))
             .unzip();
-        let f = self.functions.get(&name);
+        let name = self.qualified_names.get(&*name).unwrap_or(&name);
+        let f = self.functions.get(name);
 
         let Some((exp_args, rt)) = f else {
             return CheckError::from_message(
@@ -311,7 +340,7 @@ impl Typechecker {
             }
         }
 
-        TypedValue::get(Expr::Call(name, argvs), (*rt).clone())
+        TypedValue::get(Expr::Call((*name).clone(), argvs), (*rt).clone())
     }
 
     fn typecheck_if(
@@ -337,22 +366,24 @@ impl Typechecker {
         )
     }
 
-    fn get_type(&self, s: String) -> Result<Type, CheckError> {
-        match s.as_str() {
-            "Int" => Ok(Type::Int),
-            "Bool" => Ok(Type::Bool),
-            "Float" => Ok(Type::Float),
-            "String" => Ok(Type::String),
-            s => {
-                let Some(t) = self.types.get(s) else {
-                    return CheckError::from_message(format!("Unknown type: {s}"))
-                };
-                Ok(Type::Struct(Struct {
-                    name: s.to_string(),
-                    args: (*t).clone(),
-                }))
-            }
-        }
+    fn typecheck_attr(
+        &self,
+        name: String,
+        attr: String,
+    ) -> CheckResult<TypedExpr> {
+        let Some(Type::Struct(struct_)) = self.values.get(&*name) else {
+            return CheckError::from_message(format!(
+                "Struct `{name}` does not exist.",
+            ));
+        };
+
+        let Some((_, type_)) = struct_.clone().args.into_iter().find(|(n, _)| n == &attr) else {
+            return CheckError::from_message(format!(
+                "Struct `{name}` does not have attribute `{attr}`."
+            ));
+        };
+
+        TypedValue::get(Expr::Attr(name, struct_.clone(), attr), type_.clone())
     }
 }
 
@@ -368,6 +399,8 @@ mod tests {
             functions: Default::default(),
             types: Default::default(),
             closure: Default::default(),
+            nested_name: Default::default(),
+            qualified_names: Default::default(),
         }
     }
 

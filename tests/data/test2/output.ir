@@ -5,18 +5,12 @@ declare i32 @puts(i8*)
 
 define i32 @outer(i32 %i, i32 %j) {
 entry:
-  %alloca = alloca i32, align 4
-  store i32 %i, i32* %alloca, align 4
-  %alloca1 = alloca i32, align 4
-  store i32 %j, i32* %alloca1, align 4
-  %call = call i32 @inner(i32 3, i32 %i, i32 %j)
+  %call = call i32 @outer.inner(i32 3, i32 %i, i32 %j)
   ret i32 %call
 }
 
-define i32 @inner(i32 %k, i32 %0, i32 %1) {
+define i32 @outer.inner(i32 %k, i32 %i, i32 %j) {
 entry:
-  %alloca = alloca i32, align 4
-  store i32 %k, i32* %alloca, align 4
   %add = add i32 %i, %j
   %add1 = add i32 %add, %k
   ret i32 %add1
