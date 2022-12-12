@@ -1,6 +1,6 @@
 use crate::ast::{
-    Decl, Expr, Fun, Lit, Op, Struct, Type, TypedDecl, TypedExpr, TypedFun,
-    TypedMod, TypedStruct,
+    Closure, Decl, Expr, Fun, Lit, Op, Struct, Type, TypedDecl, TypedExpr,
+    TypedFun, TypedMod, TypedStruct,
 };
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -12,7 +12,7 @@ use inkwell::types::{
 };
 use inkwell::values::{
     AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum,
-    FunctionValue,
+    FunctionValue, PointerValue,
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
@@ -257,6 +257,7 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Call(name, args) => self.compile_call(name, args),
             Expr::If(be, e1, e2) => self.compile_if(*be, *e1, *e2),
             Expr::Attr(name, t, attr) => self.compile_attr(name, t, attr),
+            Expr::New(name, args) => self.compile_new(name, args),
         }
     }
 
@@ -474,6 +475,27 @@ impl<'ctx> CodeGen<'ctx> {
             }
             _ => self.builder.build_load(attr_ptr, "load"),
         }
+    }
+
+    fn compile_new(
+        &mut self,
+        name: String,
+        args: Vec<TypedExpr>,
+    ) -> Value<'ctx> {
+        let structs = self.structs.clone();
+        let (a, b) = structs.get(&*name).unwrap();
+
+        let args = &args
+            .into_iter()
+            .map(|a| self.compile_expr(a))
+            .collect::<Vec<_>>()[..];
+        let s = b.const_named_struct(args);
+        let ptr = self
+            .builder
+            .build_alloca(b.ptr_type(AddressSpace::Generic), "");
+        self.builder.build_store(ptr, s);
+
+        ptr.as_basic_value_enum()
     }
 }
 

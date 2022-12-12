@@ -36,6 +36,7 @@ fn test_compile(
     let stdout = stdout.trim_end_matches("\n");
     let stderr = String::from_utf8(output.stderr).unwrap();
 
+    println!("{}", stdout);
     assert_eq!(stderr, "");
     assert_eq!(stdout, expected_output);
 }

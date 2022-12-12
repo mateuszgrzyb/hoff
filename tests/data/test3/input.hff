@@ -13,5 +13,8 @@ fun get_age (s: Student): Int {
 }
 
 fun main (): Int {
+    val s: Student = Student {
+        "ala", 32
+    };
     33
 }

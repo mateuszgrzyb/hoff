@@ -207,6 +207,7 @@ impl Typechecker {
             Expr::Call(name, args) => self.typecheck_call(name, args),
             Expr::If(be, e1, e2) => self.typecheck_if(*be, *e1, *e2),
             Expr::Attr(name, _, attr) => self.typecheck_attr(name, attr),
+            Expr::New(name, args) => self.typecheck_new(name, args),
         }
     }
 
@@ -384,6 +385,24 @@ impl Typechecker {
         };
 
         TypedValue::get(Expr::Attr(name, struct_.clone(), attr), type_.clone())
+    }
+    fn typecheck_new(
+        &mut self,
+        name: String,
+        args: Vec<UntypedExpr>,
+    ) -> CheckResult<TypedExpr> {
+        let args = args
+            .into_iter()
+            .map(|e| Ok(self.typecheck_expr(e)?.v))
+            .collect::<Result<Vec<TypedExpr>, _>>()?;
+        let struct_args = self.types.get(&*name).unwrap();
+        TypedValue::get(
+            Expr::New(name.clone(), args),
+            Type::Struct(Struct {
+                name: name.clone(),
+                args: struct_args.clone(),
+            }),
+        )
     }
 }
 

@@ -40,6 +40,7 @@ pub enum Expr<T, C, S> {
     Call(String, Vec<Expr<T, C, S>>),
     If(Box<Expr<T, C, S>>, Box<Expr<T, C, S>>, Box<Expr<T, C, S>>),
     Attr(String, S, String),
+    New(String, Vec<Expr<T, C, S>>),
 }
 
 pub type UntypedExpr = Expr<String, (), ()>;
