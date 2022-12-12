@@ -88,6 +88,17 @@ impl Typechecker {
         }
     }
 
+    fn create_qualified_name(&mut self, name: String) -> String {
+        self.nested_name.push(name.clone());
+        let qualifled_name = self.nested_name.join("$$$");
+        self.qualified_names.insert(name, qualifled_name.clone());
+        qualifled_name
+    }
+
+    fn get_qualified_name(&self, name: String) -> String {
+        (*self.qualified_names.get(&*name).unwrap_or(&name)).clone()
+    }
+
     pub fn typecheck(
         &mut self,
         m: UntypedMod,
@@ -116,9 +127,7 @@ impl Typechecker {
     }
 
     fn typecheck_fun(&mut self, f: UntypedFun) -> CheckResult<TypedFun> {
-        self.nested_name.push(f.name.clone());
-        let name = self.nested_name.join(".");
-        self.qualified_names.insert(f.name, name.clone());
+        let name = self.create_qualified_name(f.name);
         let args = self.typecheck_fun_args(f.args)?;
         let rt = self.get_type(f.rt)?;
 
@@ -323,8 +332,8 @@ impl Typechecker {
             .into_iter()
             .map(|TypedValue { v, t }| (v, t))
             .unzip();
-        let name = self.qualified_names.get(&*name).unwrap_or(&name);
-        let f = self.functions.get(name);
+        let name = self.get_qualified_name(name);
+        let f = self.functions.get(&*name);
 
         let Some((exp_args, rt)) = f else {
             return CheckError::from_message(
@@ -341,7 +350,7 @@ impl Typechecker {
             }
         }
 
-        TypedValue::get(Expr::Call((*name).clone(), argvs), (*rt).clone())
+        TypedValue::get(Expr::Call(name.clone(), argvs), (*rt).clone())
     }
 
     fn typecheck_if(
