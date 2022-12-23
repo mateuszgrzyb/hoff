@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod test {
-    use crate::ast::*;
+    use crate::ast::untyped::*;
+    use crate::ast::{Lit, Op};
     use crate::grammar::{ExprParser, FunParser, ModParser};
     use rstest::*;
 
@@ -148,7 +149,7 @@ mod test {
     fn test_parse_binop_adv(
         expr_parser: ExprParser,
         #[case] binop_text: &str,
-        #[case] exp_binop_ast: UntypedExpr,
+        #[case] exp_binop_ast: Expr,
     ) {
         // when
         let binop_ast = expr_parser.parse(binop_text).unwrap();
@@ -164,11 +165,11 @@ mod test {
         let exp_fn_ast = Fun {
             name: "name".to_string(),
             args: Vec::from([
-                ("a".to_string(), "Int".to_string()),
-                ("b".to_string(), "Int".to_string()),
-                ("c".to_string(), "Int".to_string()),
+                ("a".to_string(), Type::Simple("Int".to_string())),
+                ("b".to_string(), Type::Simple("Int".to_string())),
+                ("c".to_string(), Type::Simple("Int".to_string())),
             ]),
-            rt: "Int".to_string(),
+            rt: Type::Simple("Int".to_string()),
             body: (Expr::Lit(Lit::Int(33))),
         };
 
@@ -199,37 +200,40 @@ mod test {
             decls: Vec::from([
                 Decl::Fun(Fun {
                     name: "f".to_string(),
-                    args: Vec::from([("a".to_string(), "Int".to_string())]),
-                    rt: "Int".to_string(),
+                    args: Vec::from([(
+                        "a".to_string(),
+                        Type::Simple("Int".to_string()),
+                    )]),
+                    rt: Type::Simple("Int".to_string()),
                     body: (Expr::Lit(Lit::Int(1))),
                 }),
                 Decl::Fun(Fun {
                     name: "g".to_string(),
                     args: Vec::from([
-                        ("b".to_string(), "Int".to_string()),
-                        ("c".to_string(), "Int".to_string()),
+                        ("b".to_string(), Type::Simple("Int".to_string())),
+                        ("c".to_string(), Type::Simple("Int".to_string())),
                     ]),
-                    rt: "Int".to_string(),
+                    rt: Type::Simple("Int".to_string()),
                     body: (Expr::Lit(Lit::Int(2))),
                 }),
                 Decl::Fun(Fun {
                     name: "h".to_string(),
                     args: Vec::from([
-                        ("d".to_string(), "Int".to_string()),
-                        ("e".to_string(), "Int".to_string()),
-                        ("f".to_string(), "Int".to_string()),
+                        ("d".to_string(), Type::Simple("Int".to_string())),
+                        ("e".to_string(), Type::Simple("Int".to_string())),
+                        ("f".to_string(), Type::Simple("Int".to_string())),
                     ]),
-                    rt: "Int".to_string(),
+                    rt: Type::Simple("Int".to_string()),
                     body: (Expr::Lit(Lit::Int(3))),
                 }),
                 Decl::Fun(Fun {
                     name: "i".to_string(),
                     args: Vec::from([
-                        ("a".to_string(), "Int".to_string()),
-                        ("b".to_string(), "Int".to_string()),
-                        ("c".to_string(), "Int".to_string()),
+                        ("a".to_string(), Type::Simple("Int".to_string())),
+                        ("b".to_string(), Type::Simple("Int".to_string())),
+                        ("c".to_string(), Type::Simple("Int".to_string())),
                     ]),
-                    rt: "Int".to_string(),
+                    rt: Type::Simple("Int".to_string()),
                     body: (Expr::Value("a".to_string())),
                 }),
             ]),

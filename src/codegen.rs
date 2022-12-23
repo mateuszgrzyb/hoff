@@ -1,14 +1,11 @@
-use crate::ast::{
-    Closure, Decl, Expr, Fun, Lit, Op, Struct, Type, TypedDecl, TypedExpr,
-    TypedFun, TypedMod, TypedStruct,
-};
+use crate::ast::{typed, Decl, Expr, Lit, Op, SimpleType, Type};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{
-    BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FloatType, IntType,
-    PointerType, StructType,
+    AnyType, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FloatType,
+    IntType, PointerType, StructType,
 };
 use inkwell::values::{
     AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum,
@@ -17,6 +14,7 @@ use inkwell::values::{
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::{Debug, Formatter};
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
@@ -33,7 +31,7 @@ pub struct CodeGen<'ctx> {
     pub builder: Builder<'ctx>,
     pub parent_basic_block: Option<BasicBlock<'ctx>>,
     pub types: Types<'ctx>,
-    pub structs: HashMap<String, (TypedStruct, StructType<'ctx>)>,
+    pub structs: HashMap<String, (typed::Struct, StructType<'ctx>)>,
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     pub values: HashMap<String, BasicValueEnum<'ctx>>,
     pub closure: HashMap<String, BasicValueEnum<'ctx>>,
@@ -63,7 +61,7 @@ impl<'ctx> CodeGen<'ctx> {
             int: context.i32_type(),
             float: context.f32_type(),
             bool: context.bool_type(),
-            string: context.i8_type().ptr_type(AddressSpace::Generic),
+            string: context.i8_type().ptr_type(AddressSpace::default()),
         };
         let mut functions = HashMap::new();
 
@@ -72,7 +70,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "puts",
                 context.i32_type().fn_type(
                     &[BasicMetadataTypeEnum::from(
-                        context.i8_type().ptr_type(AddressSpace::Generic),
+                        context.i8_type().ptr_type(AddressSpace::default()),
                     )],
                     false,
                 ),
@@ -97,17 +95,19 @@ impl<'ctx> CodeGen<'ctx> {
         })
     }
 
-    fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
+    fn get_type(&self, t: &Type<SimpleType>) -> BasicTypeEnum<'ctx> {
         match t {
-            Type::Int => self.types.int.into(),
-            Type::Bool => self.types.bool.into(),
-            Type::Float => self.types.float.into(),
-            Type::String => self.types.string.into(),
-            Type::Fun(args, rt) => {
-                let rt = self.get_type(rt);
+            Type::Simple(SimpleType::Int) => self.types.int.into(),
+            Type::Simple(SimpleType::Bool) => self.types.bool.into(),
+            Type::Simple(SimpleType::Float) => self.types.float.into(),
+            Type::Simple(SimpleType::String) => self.types.string.into(),
+            Type::Function(ts) => {
+                let mut args = ts.clone();
+                let rt = args.pop().unwrap();
+                let rt = self.get_type(&rt);
                 let args = args
                     .into_iter()
-                    .map(|a| self.get_type(a).into())
+                    .map(|a| self.get_type(&a).into())
                     .collect::<Vec<BasicMetadataTypeEnum>>();
                 let ft = match rt {
                     BasicTypeEnum::ArrayType(at) => {
@@ -128,21 +128,21 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 };
 
-                ft.ptr_type(AddressSpace::Const).into()
+                ft.ptr_type(AddressSpace::default()).into()
             }
-            Type::Struct(s) => self
+            Type::Simple(SimpleType::Struct(s)) => self
                 .structs
                 .get(&*s.name)
                 .unwrap()
                 .1
-                .ptr_type(AddressSpace::Generic)
+                .ptr_type(AddressSpace::default())
                 .into(),
         }
     }
 
     pub fn compile_module(
         &mut self,
-        m: TypedMod,
+        m: typed::Mod,
     ) -> Result<(), Box<dyn Error>> {
         self.module.set_name(m.name.as_str());
         let mut module_name = m.name.clone();
@@ -156,7 +156,7 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn compile_decl(&mut self, d: TypedDecl) {
+    fn compile_decl(&mut self, d: typed::Decl) {
         match d {
             Decl::Fun(f) => {
                 self.compile_fun(f, Vec::new());
@@ -169,8 +169,8 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_fun(
         &mut self,
-        f: TypedFun,
-        closure: Vec<(String, Type)>,
+        f: typed::Fun,
+        closure: Vec<(String, Type<SimpleType>)>,
     ) -> Value<'ctx> {
         // prepare function type with closure
 
@@ -229,7 +229,7 @@ impl<'ctx> CodeGen<'ctx> {
             .as_basic_value_enum()
     }
 
-    fn compile_struct(&mut self, struct_: TypedStruct) {
+    fn compile_struct(&mut self, struct_: typed::Struct) {
         let name = struct_.clone().name;
         let args = struct_
             .clone()
@@ -244,7 +244,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.structs.insert(name, (struct_.clone(), s));
     }
 
-    fn compile_expr(&mut self, e: TypedExpr) -> Value<'ctx> {
+    fn compile_expr(&mut self, e: typed::Expr) -> Value<'ctx> {
         match e {
             Expr::BinOp(lh, op, rh) => self.compile_binop(*lh, op, *rh),
             Expr::Lit(l) => self.compile_lit(l),
@@ -263,9 +263,9 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_binop(
         &mut self,
-        lh: TypedExpr,
+        lh: typed::Expr,
         op: Op,
-        rh: TypedExpr,
+        rh: typed::Expr,
     ) -> Value<'ctx> {
         let lh = self.compile_expr(lh);
         let rh = self.compile_expr(rh);
@@ -393,15 +393,19 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_assign(
         &mut self,
         name: String,
-        type_: Type,
-        val: TypedExpr,
+        type_: Type<SimpleType>,
+        val: typed::Expr,
     ) -> Value<'ctx> {
         let val = self.compile_expr(val);
         self.values.insert(name, val);
         val
     }
 
-    fn compile_chain(&mut self, lh: TypedExpr, rh: TypedExpr) -> Value<'ctx> {
+    fn compile_chain(
+        &mut self,
+        lh: typed::Expr,
+        rh: typed::Expr,
+    ) -> Value<'ctx> {
         self.compile_expr(lh);
         self.compile_expr(rh)
     }
@@ -409,7 +413,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_call(
         &mut self,
         name: String,
-        args: Vec<TypedExpr>,
+        args: Vec<typed::Expr>,
     ) -> Value<'ctx> {
         let f = *self.functions.get(name.as_str()).unwrap();
         let closure = self.closures.get(&*name).unwrap().clone();
@@ -430,18 +434,91 @@ impl<'ctx> CodeGen<'ctx> {
             .chain(closure.clone())
             .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
+        /*
+        println!("
+        name {}
+        sa {}
+        c {}
+        a {}
+        f {}
+        ",
+            name,
+            standard_args.len(),
+            closure.len(),
+            args.len(),
+            f.count_params(),
+        );
+
+         */
+
         self.builder
             .build_call(f, &args[..], "call")
             .try_as_basic_value()
             .left()
             .unwrap()
+
+        /*
+        if f.count_params() < args.len() as u32 {
+            panic!("invalid state")
+        } else if f.count_params() == args.len() as u32 {
+            self.builder
+                .build_call(f, &args[..], "call")
+                .try_as_basic_value()
+                .left()
+                .unwrap()
+        } else {
+            let partial_ft = Vec::from([
+                Type::Simple(SimpleType::Int),
+                Type::Simple(SimpleType::Int),
+            ]);
+            let mut partial_ft = partial_ft
+                .into_iter()
+                .map(|t| self.get_type(&t))
+                .collect::<Vec<_>>();
+            let partial_rt = partial_ft.pop().unwrap();
+            let ft = partial_rt.fn_type(
+                &partial_ft
+                    .into_iter()
+                    .map(|t| t.into())
+                    .collect::<Vec<BasicMetadataTypeEnum>>()[..],
+                false,
+            );
+            let partial_f = self.module.add_function("", ft, None);
+
+            let bb = self.context.append_basic_block(partial_f, "entry");
+            self.builder.position_at_end(bb);
+            let partial_rt = self
+                .builder
+                .build_call(
+                    f,
+                    &(args
+                        .into_iter()
+                        .chain(partial_f.get_param_iter().map(|p| p.into()))
+                        .collect::<Vec<_>>())[..],
+                    "call",
+                )
+                .try_as_basic_value()
+                .left()
+                .unwrap();
+            self.builder.build_return(Some(&partial_rt));
+
+            self.builder
+                .position_at_end(self.parent_basic_block.unwrap());
+
+            partial_f
+                .as_global_value()
+                .as_pointer_value()
+                .as_basic_value_enum()
+        }
+
+         */
     }
 
     fn compile_if(
         &mut self,
-        be: TypedExpr,
-        e1: TypedExpr,
-        e2: TypedExpr,
+        be: typed::Expr,
+        e1: typed::Expr,
+        e2: typed::Expr,
     ) -> Value<'ctx> {
         let be = self.compile_expr(be);
         let e1 = self.compile_expr(e1);
@@ -453,7 +530,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_attr(
         &self,
         name: String,
-        t: TypedStruct,
+        t: typed::Struct,
         attr: String,
     ) -> Value<'ctx> {
         let ptr = self.values.get(&*name).unwrap().into_pointer_value();
@@ -470,7 +547,7 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap();
 
         match t {
-            Type::Fun(_, _) | Type::Struct(_) => {
+            Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
                 attr_ptr.as_basic_value_enum()
             }
             _ => self.builder.build_load(attr_ptr, "load"),
@@ -480,22 +557,24 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_new(
         &mut self,
         name: String,
-        args: Vec<TypedExpr>,
+        args: Vec<typed::Expr>,
     ) -> Value<'ctx> {
         let structs = self.structs.clone();
-        let (a, b) = structs.get(&*name).unwrap();
+        let (_, struct_type) = structs.get(&*name).unwrap();
 
-        let args = &args
+        let struct_args = args
             .into_iter()
             .map(|a| self.compile_expr(a))
-            .collect::<Vec<_>>()[..];
-        let s = b.const_named_struct(args);
-        let ptr = self
-            .builder
-            .build_alloca(b.ptr_type(AddressSpace::Generic), "");
-        self.builder.build_store(ptr, s);
+            .collect::<Vec<_>>();
 
-        ptr.as_basic_value_enum()
+        let struct_value = struct_type.const_named_struct(&struct_args);
+
+        let struct_ptr =
+            self.builder.build_malloc(*struct_type, "malloc").unwrap();
+
+        self.builder.build_store(struct_ptr, struct_value);
+
+        struct_ptr.as_basic_value_enum()
     }
 }
 
@@ -517,25 +596,34 @@ mod tests {
                 Decl::Struct(Struct {
                     name: "Foo".to_string(),
                     args: Vec::from([
-                        ("a".to_string(), Type::Int),
-                        ("b".to_string(), Type::Bool),
-                        ("c".to_string(), Type::String),
+                        ("a".to_string(), Type::Simple(SimpleType::Int)),
+                        ("b".to_string(), Type::Simple(SimpleType::Bool)),
+                        ("c".to_string(), Type::Simple(SimpleType::String)),
                     ]),
                 }),
                 Decl::Fun(Fun {
                     name: "f1".to_string(),
                     args: Vec::from([(
                         "a".to_string(),
-                        Type::Struct(Struct {
+                        Type::Simple(SimpleType::Struct(Struct {
                             name: "Foo".to_string(),
                             args: Vec::from([
-                                ("a".to_string(), Type::Int),
-                                ("b".to_string(), Type::Bool),
-                                ("c".to_string(), Type::String),
+                                (
+                                    "a".to_string(),
+                                    Type::Simple(SimpleType::Int),
+                                ),
+                                (
+                                    "b".to_string(),
+                                    Type::Simple(SimpleType::Bool),
+                                ),
+                                (
+                                    "c".to_string(),
+                                    Type::Simple(SimpleType::String),
+                                ),
                             ]),
-                        }),
+                        })),
                     )]),
-                    rt: Type::Int,
+                    rt: Type::Simple(SimpleType::Int),
                     body: Expr::Lit(Lit::Int(32)),
                 }),
             ]),

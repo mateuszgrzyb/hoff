@@ -1,6 +1,7 @@
-use clap::{Parser, ValueEnum};
+use clap::{arg, Parser, ValueEnum};
 
 #[derive(ValueEnum, Clone, Debug)]
+#[value(rename_all = "lower")]
 pub enum EmitLLVMTarget {
     IrFile,
     StdOut,
@@ -11,19 +12,19 @@ pub enum EmitLLVMTarget {
 pub struct Args {
     pub files: Vec<String>,
     /// Print AST to stdout
-    #[arg(long, default_value_t = false)]
+    #[arg(short = 'a', long, default_value_t = false)]
     pub dump_ast: bool,
 
     /// Print typed AST to stdout
-    #[arg(long, default_value_t = false)]
+    #[arg(short = 't', long, default_value_t = false)]
     pub dump_typed_ast: bool,
 
     /// Emit LLVM IR to defined target
-    #[arg(long, default_value_t = false)]
+    #[arg(short = 'e', long, default_value_t = false)]
     pub emit_llvm: bool,
 
     /// Print LLVM IR to stdout
-    #[arg(long, value_enum, default_value_t = EmitLLVMTarget::IrFile)]
+    #[arg(short = 'f', long, value_enum, default_value_t = EmitLLVMTarget::IrFile)]
     pub emit_llvm_target: EmitLLVMTarget,
 
     /// Set optimization level
@@ -31,12 +32,15 @@ pub struct Args {
     /// 1 = Less
     /// 2 = Default
     /// 3 = Aggressive
-    #[arg(short, default_value_t = 2)]
-    pub O: u32,
+    #[arg(id = "Opt Level", short = 'O', default_value_t = 2)]
+    pub o: u32,
 
-    #[arg(long, default_value_t = false)]
+    /// Disable LLVM IR verification
+    /// Useful for dumping LLVM IR
+    #[arg(short = 'n', long, default_value_t = false)]
     pub no_verify_llvm: bool,
 
-    #[arg(long, default_value_t = false)]
+    /// Run in REPL (Read-Eval-Print Loop) mode
+    #[arg(short = 'r', long, default_value_t = false)]
     pub repl: bool,
 }

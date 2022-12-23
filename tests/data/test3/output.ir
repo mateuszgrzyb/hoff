@@ -3,6 +3,8 @@ source_filename = "tests/data/test3/input.hff.ir"
 
 %Student = type <{ i8*, i32 }>
 
+@0 = private unnamed_addr constant [6 x i8] c"\22ala\22\00", align 1
+
 declare i32 @puts(i8*)
 
 define i8* @get_name(%Student* %s) {
@@ -21,5 +23,10 @@ entry:
 
 define i32 @main() {
 entry:
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student* getelementptr (%Student, %Student* null, i32 1) to i32))
+  %malloc = bitcast i8* %malloccall to %Student*
+  store %Student <{ i8* getelementptr inbounds ([6 x i8], [6 x i8]* @0, i32 0, i32 0), i32 32 }>, %Student* %malloc, align 1
   ret i32 33
 }
+
+declare noalias i8* @malloc(i32)

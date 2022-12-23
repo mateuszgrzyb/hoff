@@ -7,11 +7,11 @@ mod typecheck;
 
 use clap::Parser;
 use inkwell::context::Context;
-use lalrpop_util::{lalrpop_mod, ParseError};
+use lalrpop_util::lalrpop_mod;
 use std::error::Error;
 use std::io::stdin;
 
-use crate::ast::{Decl, Expr, Fun, Lit, Mod, Type, TypedMod};
+use crate::ast::{typed, Decl, Expr, Fun, Lit, Mod, SimpleType, Type};
 use crate::cli::{Args, EmitLLVMTarget};
 use crate::codegen::CodeGen;
 use crate::grammar::{ExprParser, ModParser};
@@ -54,7 +54,7 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
             decls: Vec::from([Decl::Fun(Fun {
                 name: "main".to_string(),
                 args: Vec::new(),
-                rt: "Int".to_string(),
+                rt: Type::Simple("Int".to_string()),
                 body: expr,
                 /*
                 body: Expr::Chain(
@@ -73,7 +73,7 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
 
         continue;
 
-        let interpreter = Interpreter::create(codegen.module, args.O);
+        let interpreter = Interpreter::create(codegen.module, args.o);
 
         interpreter.run()?;
     }
@@ -109,7 +109,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
             let mut typechecker = Typechecker::create();
             typechecker.typecheck(module)
         })
-        .collect::<Result<Vec<TypedMod>, _>>()?;
+        .collect::<Result<Vec<typed::Mod>, _>>()?;
 
     if args.dump_typed_ast {
         for module in typed_modules {
@@ -163,7 +163,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         })
         .ok_or_else(|| format!("No files were compiled"))?;
 
-    let interpreter = Interpreter::create(m, args.O);
+    let interpreter = Interpreter::create(m, args.o);
     interpreter.run()?;
 
     Ok(())

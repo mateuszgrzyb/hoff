@@ -35,14 +35,26 @@ Comma<T>: Vec<T> = { // (1)
     }
 };
 
+Arrow<T>: Vec<T> = { // (1)
+    <mut v:(<T> "->")*> <e:T?> => match e { // (2)
+        None => v,
+        Some(e) => { v.push(e); v }
+    }
+};
+
 Id: String =
     ID => <>.to_string();
 
 Tid: String =
     TID => <>.to_string();
 
-TypedId: (String, String) =
-    <id:Id> ":" <t:Tid> => (id, t);
+Type: Type<String> = {
+    <Tid> => Type::Simple(<>),
+    "(" <Arrow<Type>> ")" => Type::Function(<>),
+};
+
+TypedId: (String, Type<String>) =
+    <id:Id> ":" <t:Type> => (id, t);
 
 Lit: Lit = {
     INT => Lit::Int(str::parse(<>).unwrap()),
@@ -52,18 +64,18 @@ Lit: Lit = {
     STRING => Lit::String(<>.to_string()),
 };
 
-Expr0: UntypedExpr = {
+Expr0: untyped::Expr = {
     "(" <Expr> ")",
 };
 
-Expr1: UntypedExpr = {
-    <Fun> => UntypedExpr::Function(Box::new(<>), ()),
+Expr1: untyped::Expr = {
+    <Fun> => untyped::Expr::Function(Box::new(<>), ()),
     <id:Tid> "{" <args:Comma<Expr>> "}"
         => Expr::New(id, args),
     <Expr0>,
 };
 
-Expr2: UntypedExpr = {
+Expr2: untyped::Expr = {
     <id: Id> "(" <args: Comma<Expr>> ")"
         => Expr::Call(id, args),
     <id:Id> => Expr::Value(id),
@@ -71,19 +83,19 @@ Expr2: UntypedExpr = {
     <Expr1>,
 };
 
-Expr3: UntypedExpr = {
+Expr3: untyped::Expr = {
     <lh:Expr3> "*" <rh:Expr2> => get_binop(Op::Mul)(<>),
     <lh:Expr3> "/" <rh:Expr2> => get_binop(Op::Div)(<>),
     <Expr2>,
 };
 
-Expr4: UntypedExpr = {
+Expr4: untyped::Expr = {
     <lh:Expr4> "+" <rh:Expr3> => get_binop(Op::Add)(<>),
     <lh:Expr4> "-" <rh:Expr3> => get_binop(Op::Sub)(<>),
     <Expr3>,
 };
 
-Expr5: UntypedExpr = {
+Expr5: untyped::Expr = {
     <lh:Expr5> "<" <rh:Expr4> => get_binop(Op::Lt)(<>),
     <lh:Expr5> "<=" <rh:Expr4> => get_binop(Op::Le)(<>),
     <lh:Expr5> "!=" <rh:Expr4> => get_binop(Op::Ne)(<>),
@@ -93,29 +105,29 @@ Expr5: UntypedExpr = {
     <Expr4>,
 }
 
-Expr6: UntypedExpr = {
+Expr6: untyped::Expr = {
     <lh:Expr6> "&&" <rh:Expr5> => get_binop(Op::And)(<>),
     <lh:Expr6> "||" <rh:Expr5> => get_binop(Op::Or)(<>),
     <Expr5>,
 }
 
-Expr7: UntypedExpr = {
+Expr7: untyped::Expr = {
     <Expr6>,
 };
 
-Expr8: UntypedExpr = {
+Expr8: untyped::Expr = {
     "val" <tid:TypedId> "=" <expr:Expr7>
         => Expr::Assign(tid, Box::new(expr)),
     <Expr7>
 };
 
-Expr9: UntypedExpr = {
+Expr9: untyped::Expr = {
     <lh:Expr9> ";" <rh:Expr8>
         => Expr::Chain(Box::new(lh), Box::new(rh)),
     <Expr8>,
 };
 
-pub Expr: UntypedExpr = {
+pub Expr: untyped::Expr = {
     "if" <be:Expr> "{" <e1:Expr9> "}" "else" "{" <e2:Expr9> "}"
         => Expr::If(Box::new(be), Box::new(e1), Box::new(e2)),
     <id:Id> "->" <attr:Id>
@@ -123,20 +135,20 @@ pub Expr: UntypedExpr = {
     <Expr9>,
 };
 
-pub Fun: UntypedFun = {
-    "fun" <name:Id> "(" <args:Comma<TypedId>> ")" ":" <rt: Tid> "{" <body:Expr> "}"
+pub Fun: untyped::Fun = {
+    "fun" <name:Id> "(" <args:Comma<TypedId>> ")" ":" <rt: Type> "{" <body:Expr> "}"
         => Fun {<>},
 };
 
-Struct: UntypedStruct = {
+Struct: untyped::Struct = {
     "type" <name:Tid> "{" <args:Comma<TypedId>> "}"
         => Struct { name, args },
 };
 
-Decl: UntypedDecl = {
+Decl: untyped::Decl = {
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
 }
 
-pub Mod: Vec<UntypedDecl> =
+pub Mod: Vec<untyped::Decl> =
     <Decl*>;
