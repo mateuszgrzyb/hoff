@@ -4,6 +4,8 @@ name: Test
 
 env:
   CARGO_TERM_COLOR: always
+  PATH: "${{ runner.temp }}/llvm/bin:$PATH"
+  LDFLAGS: "-L${{ runner.temp }}/llvm/lib -Wl,-rpath,${{ runner.temp }}/llvm/lib"
 
 jobs:
   test:
@@ -14,6 +16,7 @@ jobs:
       - uses: KyleMayes/install-llvm-action@v1
         with:
           version: "11.0"
+          directory: ${{ runner.temp }}/llvm
       - uses: actions/setup-python@v3
       - name: Run linters and check
         uses: pre-commit/action@v3.0.0
