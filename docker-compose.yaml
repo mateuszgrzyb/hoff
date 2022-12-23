@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  compiler:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    command: ["testlang", "--help"]
