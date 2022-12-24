@@ -1,61 +1,41 @@
-use crate::ast::{typed, Decl, Expr, Lit, Op, SimpleType, Type};
+mod types;
+
+use crate::ast::typed::*;
+use crate::codegen::types::Types;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{
-    AnyType, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FloatType,
-    IntType, PointerType, StructType,
+    BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType,
 };
 use inkwell::values::{
-    AnyValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum,
-    FunctionValue, PointerValue,
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue,
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::{Debug, Formatter};
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
-pub struct Types<'ctx> {
-    pub int: IntType<'ctx>,
-    pub float: FloatType<'ctx>,
-    pub bool: IntType<'ctx>,
-    pub string: PointerType<'ctx>,
-}
-
 pub struct CodeGen<'ctx> {
-    pub context: &'ctx Context,
+    context: &'ctx Context,
     pub module: Module<'ctx>,
-    pub builder: Builder<'ctx>,
-    pub parent_basic_block: Option<BasicBlock<'ctx>>,
-    pub types: Types<'ctx>,
-    pub structs: HashMap<String, (typed::Struct, StructType<'ctx>)>,
-    pub functions: HashMap<String, FunctionValue<'ctx>>,
-    pub values: HashMap<String, BasicValueEnum<'ctx>>,
-    pub closure: HashMap<String, BasicValueEnum<'ctx>>,
-    pub closures: HashMap<String, Vec<String>>,
-    pub current_function: Option<FunctionValue<'ctx>>,
-}
-
-pub struct CompError {
-    message: String,
-}
-
-impl CompError {
-    fn from_message<V>(message: String) -> Result<V, Self> {
-        Err(Self { message })
-    }
+    builder: Builder<'ctx>,
+    parent_basic_block: Option<BasicBlock<'ctx>>,
+    types: Types<'ctx>,
+    structs: HashMap<String, (Struct, StructType<'ctx>)>,
+    functions: HashMap<String, FunctionValue<'ctx>>,
+    values: HashMap<String, BasicValueEnum<'ctx>>,
+    closure: HashMap<String, BasicValueEnum<'ctx>>,
+    closures: HashMap<String, Vec<String>>,
+    current_function: Option<FunctionValue<'ctx>>,
 }
 
 type Value<'ctx> = BasicValueEnum<'ctx>;
 
 impl<'ctx> CodeGen<'ctx> {
-    pub fn create(
-        context: &'ctx Context,
-        add_stdlib: bool,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn create(context: &'ctx Context, add_stdlib: bool) -> Self {
         let module = context.create_module("sum");
         let types = Types {
             int: context.i32_type(),
@@ -80,7 +60,7 @@ impl<'ctx> CodeGen<'ctx> {
             functions.insert("puts".to_string(), puts);
         };
 
-        Ok(Self {
+        Self {
             context,
             module,
             builder: context.create_builder(),
@@ -92,10 +72,10 @@ impl<'ctx> CodeGen<'ctx> {
             closure: HashMap::new(),
             closures: HashMap::new(),
             current_function: None,
-        })
+        }
     }
 
-    fn get_type(&self, t: &Type<SimpleType>) -> BasicTypeEnum<'ctx> {
+    fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
         match t {
             Type::Simple(SimpleType::Int) => self.types.int.into(),
             Type::Simple(SimpleType::Bool) => self.types.bool.into(),
@@ -140,10 +120,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub fn compile_module(
-        &mut self,
-        m: typed::Mod,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn compile_module(&mut self, m: Mod) {
         self.module.set_name(m.name.as_str());
         let mut module_name = m.name.clone();
         module_name.push_str(".ir");
@@ -152,11 +129,9 @@ impl<'ctx> CodeGen<'ctx> {
         for d in m.decls.into_iter() {
             self.compile_decl(d);
         }
-
-        Ok(())
     }
 
-    fn compile_decl(&mut self, d: typed::Decl) {
+    fn compile_decl(&mut self, d: Decl) {
         match d {
             Decl::Fun(f) => {
                 self.compile_fun(f, Vec::new());
@@ -169,8 +144,8 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_fun(
         &mut self,
-        f: typed::Fun,
-        closure: Vec<(String, Type<SimpleType>)>,
+        f: Fun,
+        closure: Vec<(String, Type)>,
     ) -> Value<'ctx> {
         // prepare function type with closure
 
@@ -229,7 +204,7 @@ impl<'ctx> CodeGen<'ctx> {
             .as_basic_value_enum()
     }
 
-    fn compile_struct(&mut self, struct_: typed::Struct) {
+    fn compile_struct(&mut self, struct_: Struct) {
         let name = struct_.clone().name;
         let args = struct_
             .clone()
@@ -244,7 +219,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.structs.insert(name, (struct_.clone(), s));
     }
 
-    fn compile_expr(&mut self, e: typed::Expr) -> Value<'ctx> {
+    fn compile_expr(&mut self, e: Expr) -> Value<'ctx> {
         match e {
             Expr::BinOp(lh, op, rh) => self.compile_binop(*lh, op, *rh),
             Expr::Lit(l) => self.compile_lit(l),
@@ -261,12 +236,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn compile_binop(
-        &mut self,
-        lh: typed::Expr,
-        op: Op,
-        rh: typed::Expr,
-    ) -> Value<'ctx> {
+    fn compile_binop(&mut self, lh: Expr, op: Op, rh: Expr) -> Value<'ctx> {
         let lh = self.compile_expr(lh);
         let rh = self.compile_expr(rh);
         match (lh.get_type(), op) {
@@ -393,28 +363,20 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_assign(
         &mut self,
         name: String,
-        type_: Type<SimpleType>,
-        val: typed::Expr,
+        type_: Type,
+        val: Expr,
     ) -> Value<'ctx> {
         let val = self.compile_expr(val);
         self.values.insert(name, val);
         val
     }
 
-    fn compile_chain(
-        &mut self,
-        lh: typed::Expr,
-        rh: typed::Expr,
-    ) -> Value<'ctx> {
+    fn compile_chain(&mut self, lh: Expr, rh: Expr) -> Value<'ctx> {
         self.compile_expr(lh);
         self.compile_expr(rh)
     }
 
-    fn compile_call(
-        &mut self,
-        name: String,
-        args: Vec<typed::Expr>,
-    ) -> Value<'ctx> {
+    fn compile_call(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
         let f = *self.functions.get(name.as_str()).unwrap();
         let closure = self.closures.get(&*name).unwrap().clone();
 
@@ -514,12 +476,7 @@ impl<'ctx> CodeGen<'ctx> {
          */
     }
 
-    fn compile_if(
-        &mut self,
-        be: typed::Expr,
-        e1: typed::Expr,
-        e2: typed::Expr,
-    ) -> Value<'ctx> {
+    fn compile_if(&mut self, be: Expr, e1: Expr, e2: Expr) -> Value<'ctx> {
         let be = self.compile_expr(be);
         let e1 = self.compile_expr(e1);
         let e2 = self.compile_expr(e2);
@@ -530,7 +487,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_attr(
         &self,
         name: String,
-        t: typed::Struct,
+        t: Struct,
         attr: String,
     ) -> Value<'ctx> {
         let ptr = self.values.get(&*name).unwrap().into_pointer_value();
@@ -539,7 +496,7 @@ impl<'ctx> CodeGen<'ctx> {
             .args
             .into_iter()
             .enumerate()
-            .find(|(i, (a, _))| a == &attr)
+            .find(|(_, (a, _))| a == &attr)
             .unwrap();
         let attr_ptr = self
             .builder
@@ -554,11 +511,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn compile_new(
-        &mut self,
-        name: String,
-        args: Vec<typed::Expr>,
-    ) -> Value<'ctx> {
+    fn compile_new(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
         let structs = self.structs.clone();
         let (_, struct_type) = structs.get(&*name).unwrap();
 
@@ -580,7 +533,6 @@ impl<'ctx> CodeGen<'ctx> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::*;
     use crate::codegen::*;
     use rstest::*;
 
@@ -588,7 +540,7 @@ mod tests {
     fn test_1() {
         // given
         let context = Context::create();
-        let mut codegen = CodeGen::create(&context, false).unwrap();
+        let mut codegen = CodeGen::create(&context, false);
 
         let m = Mod {
             name: "test_1".to_string(),
@@ -640,7 +592,7 @@ entry:
 "#;
 
         // when
-        codegen.compile_module(m).unwrap();
+        codegen.compile_module(m);
 
         // then
         // TODO: fix

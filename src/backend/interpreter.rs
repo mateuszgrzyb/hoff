@@ -1,10 +1,11 @@
+use super::Backend;
 use inkwell::execution_engine::ExecutionEngine;
 use inkwell::module::Module;
 use inkwell::OptimizationLevel;
 use std::mem::transmute;
 
 pub struct Interpreter<'ctx> {
-    pub execution_engine: ExecutionEngine<'ctx>,
+    execution_engine: ExecutionEngine<'ctx>,
 }
 
 type MainFunc = unsafe extern "C" fn() -> u32;
@@ -20,7 +21,16 @@ impl<'ctx> Interpreter<'ctx> {
         }
     }
 
-    pub fn run(self) -> Result<(), String> {
+    fn get_opt_level(opt_level: u32) -> OptimizationLevel {
+        if opt_level > OptimizationLevel::Aggressive as u32 {
+            return OptimizationLevel::Default;
+        }
+        unsafe { transmute::<u32, OptimizationLevel>(opt_level) }
+    }
+}
+
+impl<'ctx> Backend for Interpreter<'ctx> {
+    fn run(&self) -> Result<(), String> {
         unsafe {
             let main = self.execution_engine.get_function::<MainFunc>("main");
 
@@ -33,18 +43,11 @@ impl<'ctx> Interpreter<'ctx> {
 
         Ok(())
     }
-
-    fn get_opt_level(opt_level: u32) -> OptimizationLevel {
-        if opt_level > OptimizationLevel::Aggressive as u32 {
-            return OptimizationLevel::Default;
-        }
-        unsafe { transmute::<u32, OptimizationLevel>(opt_level) }
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::interpreter::Interpreter;
+    use super::Interpreter;
     use inkwell::*;
     use rstest::*;
 

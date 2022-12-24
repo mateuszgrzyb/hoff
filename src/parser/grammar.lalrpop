@@ -1,4 +1,5 @@
-use crate::ast::*;
+use crate::ast::untyped::*;
+use crate::parser::get_binop;
 
 grammar;
 
@@ -48,12 +49,12 @@ Id: String =
 Tid: String =
     TID => <>.to_string();
 
-Type: Type<String> = {
+Type: Type = {
     <Tid> => Type::Simple(<>),
     "(" <Arrow<Type>> ")" => Type::Function(<>),
 };
 
-TypedId: (String, Type<String>) =
+TypedId: (String, Type) =
     <id:Id> ":" <t:Type> => (id, t);
 
 Lit: Lit = {
@@ -64,18 +65,18 @@ Lit: Lit = {
     STRING => Lit::String(<>.to_string()),
 };
 
-Expr0: untyped::Expr = {
+Expr0: Expr = {
     "(" <Expr> ")",
 };
 
-Expr1: untyped::Expr = {
-    <Fun> => untyped::Expr::Function(Box::new(<>), ()),
+Expr1: Expr = {
+    <Fun> => Expr::Function(Box::new(<>), ()),
     <id:Tid> "{" <args:Comma<Expr>> "}"
         => Expr::New(id, args),
     <Expr0>,
 };
 
-Expr2: untyped::Expr = {
+Expr2: Expr = {
     <id: Id> "(" <args: Comma<Expr>> ")"
         => Expr::Call(id, args),
     <id:Id> => Expr::Value(id),
@@ -83,19 +84,19 @@ Expr2: untyped::Expr = {
     <Expr1>,
 };
 
-Expr3: untyped::Expr = {
+Expr3: Expr = {
     <lh:Expr3> "*" <rh:Expr2> => get_binop(Op::Mul)(<>),
     <lh:Expr3> "/" <rh:Expr2> => get_binop(Op::Div)(<>),
     <Expr2>,
 };
 
-Expr4: untyped::Expr = {
+Expr4: Expr = {
     <lh:Expr4> "+" <rh:Expr3> => get_binop(Op::Add)(<>),
     <lh:Expr4> "-" <rh:Expr3> => get_binop(Op::Sub)(<>),
     <Expr3>,
 };
 
-Expr5: untyped::Expr = {
+Expr5: Expr = {
     <lh:Expr5> "<" <rh:Expr4> => get_binop(Op::Lt)(<>),
     <lh:Expr5> "<=" <rh:Expr4> => get_binop(Op::Le)(<>),
     <lh:Expr5> "!=" <rh:Expr4> => get_binop(Op::Ne)(<>),
@@ -105,29 +106,29 @@ Expr5: untyped::Expr = {
     <Expr4>,
 }
 
-Expr6: untyped::Expr = {
+Expr6: Expr = {
     <lh:Expr6> "&&" <rh:Expr5> => get_binop(Op::And)(<>),
     <lh:Expr6> "||" <rh:Expr5> => get_binop(Op::Or)(<>),
     <Expr5>,
 }
 
-Expr7: untyped::Expr = {
+Expr7: Expr = {
     <Expr6>,
 };
 
-Expr8: untyped::Expr = {
+Expr8: Expr = {
     "val" <tid:TypedId> "=" <expr:Expr7>
         => Expr::Assign(tid, Box::new(expr)),
     <Expr7>
 };
 
-Expr9: untyped::Expr = {
+Expr9: Expr = {
     <lh:Expr9> ";" <rh:Expr8>
         => Expr::Chain(Box::new(lh), Box::new(rh)),
     <Expr8>,
 };
 
-pub Expr: untyped::Expr = {
+pub Expr: Expr = {
     "if" <be:Expr> "{" <e1:Expr9> "}" "else" "{" <e2:Expr9> "}"
         => Expr::If(Box::new(be), Box::new(e1), Box::new(e2)),
     <id:Id> "->" <attr:Id>
@@ -135,20 +136,20 @@ pub Expr: untyped::Expr = {
     <Expr9>,
 };
 
-pub Fun: untyped::Fun = {
+pub Fun: Fun = {
     "fun" <name:Id> "(" <args:Comma<TypedId>> ")" ":" <rt: Type> "{" <body:Expr> "}"
         => Fun {<>},
 };
 
-Struct: untyped::Struct = {
+Struct: Struct = {
     "type" <name:Tid> "{" <args:Comma<TypedId>> "}"
         => Struct { name, args },
 };
 
-Decl: untyped::Decl = {
+Decl: Decl = {
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
 }
 
-pub Mod: Vec<untyped::Decl> =
+pub Mod: Vec<Decl> =
     <Decl*>;

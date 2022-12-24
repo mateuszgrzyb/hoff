@@ -1,24 +1,22 @@
 mod ast;
+mod backend;
 mod cli;
 mod codegen;
-mod interpreter;
 mod parser;
 mod typecheck;
 
 use clap::Parser;
 use inkwell::context::Context;
-use lalrpop_util::lalrpop_mod;
 use std::error::Error;
 use std::io::stdin;
 
-use crate::ast::{typed, Decl, Expr, Fun, Lit, Mod, SimpleType, Type};
-use crate::cli::{Args, EmitLLVMTarget};
+use crate::ast::typed::*;
+use crate::ast::untyped;
+use crate::backend::{Backend, Compiler, Interpreter};
+use crate::cli::{Args, EmitLLVMTarget, RunMode};
 use crate::codegen::CodeGen;
-use crate::grammar::{ExprParser, ModParser};
-use crate::interpreter::Interpreter;
+use crate::parser::grammar::{ExprParser, ModParser};
 use crate::typecheck::Typechecker;
-
-lalrpop_mod!(pub grammar);
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Args = Args::parse();
@@ -49,12 +47,12 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
 
         // decls.append(&mut ds);
 
-        let typed_decls = typechecker.typecheck(Mod {
+        let typed_decls = typechecker.typecheck(untyped::Mod {
             name: "repl".to_string(),
-            decls: Vec::from([Decl::Fun(Fun {
+            decls: Vec::from([untyped::Decl::Fun(untyped::Fun {
                 name: "main".to_string(),
                 args: Vec::new(),
-                rt: Type::Simple("Int".to_string()),
+                rt: untyped::Type::Simple("Int".to_string()),
                 body: expr,
                 /*
                 body: Expr::Chain(
@@ -65,9 +63,9 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
             })]),
         })?;
 
-        let mut codegen = CodeGen::create(&context, true)?;
+        let mut codegen = CodeGen::create(&context, true);
 
-        codegen.compile_module(typed_decls)?;
+        codegen.compile_module(typed_decls);
 
         println!("{}", codegen.module.to_string());
 
@@ -91,7 +89,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
 
     let parser = ModParser::new();
 
-    let modules = files.into_iter().map(|(name, file)| Mod {
+    let modules = files.into_iter().map(|(name, file)| untyped::Mod {
         name,
         decls: parser.parse(&file).unwrap(),
     });
@@ -109,7 +107,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
             let mut typechecker = Typechecker::create();
             typechecker.typecheck(module)
         })
-        .collect::<Result<Vec<typed::Mod>, _>>()?;
+        .collect::<Result<Vec<Mod>, _>>()?;
 
     if args.dump_typed_ast {
         for module in typed_modules {
@@ -127,9 +125,9 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         .iter()
         .zip(typed_modules)
         .map(|(context, module)| {
-            let mut codegen = CodeGen::create(context, true)?;
+            let mut codegen = CodeGen::create(context, true);
 
-            codegen.compile_module(module)?;
+            codegen.compile_module(module);
             if !args.no_verify_llvm {
                 codegen.module.verify()?;
             }
@@ -163,8 +161,12 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         })
         .ok_or_else(|| format!("No files were compiled"))?;
 
-    let interpreter = Interpreter::create(m, args.o);
-    interpreter.run()?;
+    let backend: Box<dyn Backend> = match args.mode {
+        RunMode::JIT => Box::new(Interpreter::create(m, args.o)),
+        RunMode::Compile => Box::new(Compiler::create()),
+    };
+
+    backend.run()?;
 
     Ok(())
 }

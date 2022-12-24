@@ -1,5 +1,5 @@
 use rstest::*;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -17,25 +17,22 @@ fn cli(mut command: Command) -> Command {
 }
 
 #[rstest]
-#[case("tests/data/test1/input.hff", "tests/data/test1/output.ir")]
-#[case("tests/data/test2/input.hff", "tests/data/test2/output.ir")]
-#[case("tests/data/test3/input.hff", "tests/data/test3/output.ir")]
+#[case("test1/input.hff", "test1/output.ir")]
+#[case("test2/input.hff", "test2/output.ir")]
+#[case("test3/input.hff", "test3/output.ir")]
 fn test_compile(
     mut cli: Command,
-    #[case] input_file: String,
-    #[case] output_file: String,
+    #[case] input_file: &str,
+    #[case] output_file: &str,
 ) {
-    // configure all test cases
-    for f in read_dir("tests/data").unwrap() {
-        println!("{:?}", f)
-    }
-
     // given
+    let output_file = "tests/data/".to_string() + output_file;
     let expected_output = read_to_string(output_file)
         .map(|s| s.trim_end_matches("\n").to_string())
         .unwrap();
 
     // when
+    let input_file = "tests/data/".to_string() + input_file;
     let output = cli
         .arg(input_file)
         .output()

@@ -1,4 +1,4 @@
-use crate::ast::{typed, Closure};
+use crate::ast::typed::*;
 
 pub struct ClosureManager {
     closures: Vec<Closure>,
@@ -38,7 +38,7 @@ impl ClosureManager {
         result.into_iter().flatten().collect()
     }
 
-    pub fn push(&mut self, name: String, type_: typed::Type) {
+    pub fn push(&mut self, name: String, type_: Type) {
         let tail = self.get_tail();
         tail.push((name, type_))
     }
@@ -47,7 +47,6 @@ impl ClosureManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::*;
     use rstest::*;
 
     #[fixture]

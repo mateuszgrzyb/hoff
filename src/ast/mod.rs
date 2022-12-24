@@ -14,12 +14,6 @@ pub enum Op {
     Gt,
 }
 
-pub fn get_binop(
-    op: Op,
-) -> impl FnMut(untyped::Expr, untyped::Expr) -> untyped::Expr {
-    move |lh, rh| Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Lit {
     Int(i32),
@@ -87,7 +81,8 @@ pub enum SimpleType {
 pub type Closure = Vec<(String, Type<SimpleType>)>;
 
 pub mod typed {
-    use crate::ast::{Closure, SimpleType};
+    pub use super::{Closure, SimpleType};
+    pub use super::{Lit, Op};
 
     pub type Expr = super::Expr<SimpleType, Closure, Struct>;
     pub type Fun = super::Fun<SimpleType, Closure, Struct>;
@@ -98,6 +93,8 @@ pub mod typed {
 }
 
 pub mod untyped {
+    pub use super::{Lit, Op};
+
     pub type Expr = super::Expr<String, (), ()>;
     pub type Fun = super::Fun<String, (), ()>;
     pub type Struct = super::Struct<String>;
