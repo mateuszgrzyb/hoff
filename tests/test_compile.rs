@@ -6,7 +6,7 @@ use std::process::Command;
 #[fixture]
 fn command() -> Command {
     let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    path.push("target/debug/testlang");
+    path.push("target/debug/hoff");
     Command::new(path)
 }
 
