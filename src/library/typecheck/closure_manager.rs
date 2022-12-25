@@ -1,4 +1,4 @@
-use crate::ast::typed::*;
+use crate::library::ast::typed::*;
 
 pub struct ClosureManager {
     closures: Vec<Closure>,

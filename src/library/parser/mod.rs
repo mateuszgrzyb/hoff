@@ -1,8 +1,8 @@
-use crate::ast::untyped::{Expr, Op};
+use crate::library::ast::untyped::{Expr, Op};
 
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(pub grammar, "/parser/grammar.rs");
+lalrpop_mod!(pub grammar, "/library/parser/grammar.rs");
 
 pub fn get_binop(op: Op) -> impl FnMut(Expr, Expr) -> Expr {
     move |lh, rh| Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
@@ -11,7 +11,7 @@ pub fn get_binop(op: Op) -> impl FnMut(Expr, Expr) -> Expr {
 #[cfg(test)]
 mod test {
     use super::grammar::{ExprParser, FunParser, ModParser};
-    use crate::ast::untyped::*;
+    use crate::library::ast::untyped::*;
     use rstest::*;
 
     #[fixture]

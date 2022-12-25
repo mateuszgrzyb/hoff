@@ -87,7 +87,12 @@ pub enum QualifiedImport<T, C, S> {
     Struct(Struct<T>),
 }
 
+pub trait NamedModule {
+    fn get_name(self) -> String;
+}
+
 pub mod untyped {
+    use super::NamedModule;
     pub use super::{Lit, Op};
 
     pub type Expr = super::Expr<String, (), ()>;
@@ -97,9 +102,16 @@ pub mod untyped {
     pub type Decl = super::Decl<String, (), (), Import>;
     pub type Mod = super::Mod<String, (), (), Import>;
     pub type Type = super::Type<String>;
+
+    impl NamedModule for Mod {
+        fn get_name(self) -> String {
+            self.name
+        }
+    }
 }
 
 pub mod qualified {
+    use super::NamedModule;
     pub use super::{Lit, Op};
 
     pub type Expr = super::Expr<String, (), ()>;
@@ -109,9 +121,16 @@ pub mod qualified {
     pub type Decl = super::Decl<String, (), (), Import>;
     pub type Mod = super::Mod<String, (), (), Import>;
     pub type Type = super::Type<String>;
+
+    impl NamedModule for Mod {
+        fn get_name(self) -> String {
+            self.name
+        }
+    }
 }
 
 pub mod typed {
+    use super::NamedModule;
     pub use super::{Closure, SimpleType};
     pub use super::{Lit, Op};
 
@@ -122,6 +141,12 @@ pub mod typed {
     pub type Decl = super::Decl<SimpleType, Closure, Struct, Import>;
     pub type Mod = super::Mod<SimpleType, Closure, Struct, Import>;
     pub type Type = super::Type<SimpleType>;
+
+    impl NamedModule for Mod {
+        fn get_name(self) -> String {
+            self.name
+        }
+    }
 }
 
 /*

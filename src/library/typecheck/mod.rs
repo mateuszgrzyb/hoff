@@ -1,7 +1,7 @@
 mod closure_manager;
 mod namespace;
 
-use crate::ast::{
+use crate::library::ast::{
     qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
 };
 use closure_manager::ClosureManager;
@@ -503,7 +503,7 @@ impl Typechecker {
 
 #[cfg(test)]
 mod tests {
-    use crate::typecheck::*;
+    use super::*;
     use rstest::*;
 
     #[fixture]

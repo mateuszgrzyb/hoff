@@ -1,7 +1,7 @@
-use crate::ast::{typed, untyped, SimpleType};
-use crate::backend::get_opt_level;
-use crate::codegen::CodeGen;
-use crate::typecheck::Typechecker;
+use crate::library::ast::{typed, untyped, SimpleType};
+use crate::library::backend::get_opt_level;
+use crate::library::codegen::CodeGen;
+use crate::library::typecheck::Typechecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
 

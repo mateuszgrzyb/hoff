@@ -1,5 +1,5 @@
-use crate::ast::untyped::*;
-use crate::parser::get_binop;
+use crate::library::ast::untyped::*;
+use crate::library::parser::get_binop;
 
 grammar;
 

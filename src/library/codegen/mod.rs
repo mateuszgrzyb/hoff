@@ -1,7 +1,7 @@
 mod types;
 
-use crate::ast::typed::*;
-use crate::codegen::types::Types;
+use crate::library::ast::typed::*;
+use crate::library::codegen::types::Types;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -559,7 +559,7 @@ impl<'ctx> CodeGen<'ctx> {
 
 #[cfg(test)]
 mod tests {
-    use crate::codegen::*;
+    use crate::library::codegen::*;
     use rstest::*;
 
     #[rstest]

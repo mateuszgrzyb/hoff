@@ -1,4 +1,4 @@
-use crate::ast::{qualified, untyped, Decl, Mod};
+use crate::library::ast::{qualified, untyped, Decl, Mod};
 
 type QualifyResult<V> = Result<V, String>;
 

@@ -24,7 +24,7 @@ pub enum DumpTarget {
     StdOut,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     pub files: Vec<String>,
@@ -44,6 +44,10 @@ pub struct Args {
     /// 3 = Aggressive
     #[arg(id = "Opt Level", short = 'O', default_value_t = 2)]
     pub o: u32,
+
+    /// Output file name (without file extension)
+    #[arg(short = 'o', long, default_value_t = String::from("main"))]
+    pub output: String,
 
     /// Disable LLVM IR verification.
     /// Useful for dumping LLVM IR
