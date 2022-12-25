@@ -1,7 +1,10 @@
+extern crate core;
+
 mod ast;
 mod backend;
 mod cli;
 mod codegen;
+mod import_qualifier;
 mod parser;
 mod typecheck;
 
@@ -12,9 +15,10 @@ use std::io::stdin;
 
 use crate::ast::typed::*;
 use crate::ast::untyped;
-use crate::backend::{Backend, Compiler, Interpreter};
-use crate::cli::{Args, EmitLLVMTarget, RunMode};
+use crate::backend::{Backend, Compiler, Interpreter, REPL};
+use crate::cli::{Args, DumpMode, DumpTarget, RunMode};
 use crate::codegen::CodeGen;
+use crate::import_qualifier::ImportQualifier;
 use crate::parser::grammar::{ExprParser, ModParser};
 use crate::typecheck::Typechecker;
 
@@ -30,11 +34,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn repl(args: Args) -> Result<(), Box<dyn Error>> {
     let context = Context::create();
-    let mod_parser = ModParser::new();
+    let mut repl = REPL::create(&context);
     let expr_parser = ExprParser::new();
-    let mut typechecker = Typechecker::create();
-
-    // let mut decls = Vec::new();
 
     loop {
         let mut input = String::new();
@@ -43,37 +44,23 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
         }
         let input = input.split(";;").next().unwrap_or("").to_string();
 
-        let mut expr = expr_parser.parse(&input).unwrap();
+        let expr = match expr_parser.parse(&input) {
+            Err(err) => {
+                println!("Parse error: {}", err);
+                continue;
+            }
+            Ok(expr) => expr,
+        };
 
-        // decls.append(&mut ds);
+        let result = match repl.eval(expr) {
+            Err(err) => {
+                println!("Eval error: {}", err);
+                continue;
+            }
+            Ok(result) => result,
+        };
 
-        let typed_decls = typechecker.typecheck(untyped::Mod {
-            name: "repl".to_string(),
-            decls: Vec::from([untyped::Decl::Fun(untyped::Fun {
-                name: "main".to_string(),
-                args: Vec::new(),
-                rt: untyped::Type::Simple("Int".to_string()),
-                body: expr,
-                /*
-                body: Expr::Chain(
-                    Box::new(expr),
-                    Box::new(Expr::Lit(Lit::Int(0))),
-                ),
-                 */
-            })]),
-        })?;
-
-        let mut codegen = CodeGen::create(&context, true);
-
-        codegen.compile_module(typed_decls);
-
-        println!("{}", codegen.module.to_string());
-
-        continue;
-
-        let interpreter = Interpreter::create(codegen.module, args.o);
-
-        interpreter.run()?;
+        println!("{}", result)
     }
 }
 
@@ -94,14 +81,22 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         decls: parser.parse(&file).unwrap(),
     });
 
-    if args.dump_ast && !args.dump_typed_ast {
+    if let DumpMode::Ast = args.dump_mode {
         for module in modules {
             println!("{module:#?}")
         }
         return Ok(());
     };
 
-    let typed_modules = modules
+    let qualified_modules = modules
+        .into_iter()
+        .map(|module| {
+            let mut qualifier = ImportQualifier::create();
+            qualifier.qualify(module)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let typed_modules = qualified_modules
         .into_iter()
         .map(|module| {
             let mut typechecker = Typechecker::create();
@@ -109,7 +104,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         })
         .collect::<Result<Vec<Mod>, _>>()?;
 
-    if args.dump_typed_ast {
+    if let DumpMode::TypedAst = args.dump_mode {
         for module in typed_modules {
             println!("{module:#?}")
         }
@@ -136,15 +131,13 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         })
         .collect::<Result<Vec<CodeGen>, Box<dyn Error>>>()?;
 
-    if args.emit_llvm {
+    if let DumpMode::LlvmIr = args.dump_mode {
         for codegen in codegens {
             let filename = codegen.module.get_source_file_name().to_str()?;
 
-            match args.emit_llvm_target {
-                EmitLLVMTarget::IrFile => {
-                    codegen.module.print_to_file(filename)?
-                }
-                EmitLLVMTarget::StdOut => {
+            match args.dump_target {
+                DumpTarget::File => codegen.module.print_to_file(filename)?,
+                DumpTarget::StdOut => {
                     println!("{}", codegen.module.to_string())
                 }
             }

@@ -8,13 +8,13 @@ match {
     r"//[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
     r"#[^\n\r]*[\n\r]*" => { }, // Skip `# comments`
     r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip `/* comments */`
-    "fun", "val", "type",
+    "fun", "val", "type", "import",
     "true" => TRUE,
     "false" => FALSE,
     "if", "else",
     "&&", "||",
     "<", "<=", "!=", "==", ">=", ">",
-    ",", ":",
+    ",", "::", ":",
     "(", ")",
     "{", "}",
     "->",
@@ -29,15 +29,22 @@ match {
     r#"".*""# => STRING,
 }
 
-Comma<T>: Vec<T> = { // (1)
-    <mut v:(<T> ",")*> <e:T?> => match e { // (2)
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
         None => v,
         Some(e) => { v.push(e); v }
     }
 };
 
-Arrow<T>: Vec<T> = { // (1)
-    <mut v:(<T> "->")*> <e:T?> => match e { // (2)
+Arrow<T>: Vec<T> = {
+    <mut v:(<T> "->")*> <e:T?> => match e {
+        None => v,
+        Some(e) => { v.push(e); v }
+    }
+};
+
+DoubleColon<T>: Vec<T> = {
+    <mut v:(<T> "::")*> <e:T?> => match e {
         None => v,
         Some(e) => { v.push(e); v }
     }
@@ -146,10 +153,11 @@ Struct: Struct = {
         => Struct { name, args },
 };
 
+
 Decl: Decl = {
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
-}
+};
 
 pub Mod: Vec<Decl> =
     <Decl*>;

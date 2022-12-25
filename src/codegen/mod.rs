@@ -23,7 +23,7 @@ pub struct CodeGen<'ctx> {
     pub module: Module<'ctx>,
     builder: Builder<'ctx>,
     parent_basic_block: Option<BasicBlock<'ctx>>,
-    types: Types<'ctx>,
+    pub types: Types<'ctx>,
     structs: HashMap<String, (Struct, StructType<'ctx>)>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     values: HashMap<String, BasicValueEnum<'ctx>>,
@@ -139,6 +139,9 @@ impl<'ctx> CodeGen<'ctx> {
             Decl::Struct(s) => {
                 self.compile_struct(s);
             }
+            Decl::Import(i) => {
+                self.compile_import(i);
+            }
         }
     }
 
@@ -217,6 +220,30 @@ impl<'ctx> CodeGen<'ctx> {
         s.set_body(&args[..], true);
 
         self.structs.insert(name, (struct_.clone(), s));
+    }
+
+    fn compile_import(&mut self, import_: Import) {
+        match import_ {
+            Import::Fun(f) => self.compile_import_fun(f),
+            Import::Struct(s) => self.compile_struct(s),
+        }
+    }
+
+    fn compile_import_fun(&mut self, f: Fun) {
+        let (arg_names, arg_types) = &f.args
+            .clone()
+            .into_iter()
+            .map(|(n, t)| (n, self.get_type(&t).into()))
+            .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
+
+        let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
+
+        let function =
+            self.module.add_function(f.name.as_str(), fn_type, None);
+
+        for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
+            p.set_name(n.as_str());
+        }
     }
 
     fn compile_expr(&mut self, e: Expr) -> Value<'ctx> {

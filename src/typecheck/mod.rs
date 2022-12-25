@@ -2,37 +2,11 @@ mod closure_manager;
 mod namespace;
 
 use crate::ast::{
-    typed, untyped, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
+    qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
 };
 use closure_manager::ClosureManager;
 use namespace::Namespace;
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-
-pub struct CheckError {
-    message: String,
-}
-
-impl CheckError {
-    fn from_message<V>(message: String) -> Result<V, CheckError> {
-        Err(Self { message })
-    }
-}
-
-impl Debug for CheckError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Display for CheckError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for CheckError {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TypedValue<V, T> {
@@ -46,7 +20,7 @@ impl<V, T> TypedValue<V, T> {
     }
 }
 
-type CheckResult<V, T = typed::Type> = Result<TypedValue<V, T>, CheckError>;
+type CheckResult<V, T = typed::Type> = Result<TypedValue<V, T>, String>;
 
 pub struct Typechecker {
     values: HashMap<String, typed::Type>,
@@ -75,7 +49,14 @@ impl Typechecker {
         }
     }
 
-    fn get_type(&self, s: untyped::Type) -> Result<typed::Type, CheckError> {
+    pub fn get_type_of_expr(
+        &mut self,
+        expr: qualified::Expr,
+    ) -> Result<(typed::Expr, typed::Type), String> {
+        self.typecheck_expr(expr).map(|tv| (tv.v, tv.t))
+    }
+
+    fn get_type(&self, s: qualified::Type) -> Result<typed::Type, String> {
         match s {
             Type::Function(ts) => {
                 let ts = ts
@@ -91,7 +72,7 @@ impl Typechecker {
                 "String" => Ok(Type::Simple(SimpleType::String)),
                 s => {
                     let Some(t) = self.types.get(s) else {
-                            return CheckError::from_message(format!("Unknown type: {s}"))
+                            return Err(format!("Unknown type: {s}"))
                         };
                     Ok(Type::Simple(SimpleType::Struct(Struct {
                         name: s.to_string(),
@@ -104,35 +85,39 @@ impl Typechecker {
 
     pub fn typecheck(
         &mut self,
-        m: untyped::Mod,
-    ) -> Result<typed::Mod, CheckError> {
+        m: qualified::Mod,
+    ) -> Result<typed::Mod, String> {
         let name = m.name;
         let decls = m
             .decls
             .into_iter()
             .map(|d| Ok(self.typecheck_decl(d)?.v))
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, String>>()?;
 
         Ok(Mod { name, decls })
     }
 
     fn typecheck_decl(
         &mut self,
-        d: untyped::Decl,
+        d: qualified::Decl,
     ) -> CheckResult<typed::Decl> {
         match d {
-            Decl::Fun(f) => {
-                let f = self.typecheck_fun(f)?;
-                TypedValue::get(Decl::Fun(f.v), f.t)
-            }
-            Decl::Struct(s) => {
-                let s = self.typecheck_struct(s)?;
-                TypedValue::get(Decl::Struct(s.v), s.t)
-            }
+            Decl::Fun(f) => self.typecheck_fun(f).map(|f| TypedValue {
+                v: Decl::Fun(f.v),
+                t: f.t,
+            }),
+            Decl::Struct(s) => self.typecheck_struct(s).map(|s| TypedValue {
+                v: Decl::Struct(s.v),
+                t: s.t,
+            }),
+            Decl::Import(i) => self.typecheck_import(i).map(|i| TypedValue {
+                v: Decl::Import(i.v),
+                t: i.t,
+            }),
         }
     }
 
-    fn typecheck_fun(&mut self, f: untyped::Fun) -> CheckResult<typed::Fun> {
+    fn typecheck_fun(&mut self, f: qualified::Fun) -> CheckResult<typed::Fun> {
         let name = self.namespace.create_qualified_name(f.name);
         let args = self.typecheck_fun_args(f.args)?;
         let rt = self.get_type(f.rt)?;
@@ -154,7 +139,7 @@ impl Typechecker {
         self.namespace.drop_qualified_name();
 
         if rt != body.t {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Return type and body type does not match: {:?} != {:?}",
                 rt, body.t,
             ));
@@ -176,14 +161,14 @@ impl Typechecker {
 
     fn typecheck_struct(
         &mut self,
-        struct_: untyped::Struct,
+        struct_: qualified::Struct,
     ) -> CheckResult<typed::Struct> {
         let name = struct_.name;
         let args = struct_
             .args
             .into_iter()
             .map(|(n, t)| Ok((n, self.get_type(t)?)))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, String>>()?;
 
         self.types.insert(name.clone(), args.clone());
 
@@ -195,14 +180,21 @@ impl Typechecker {
         )
     }
 
+    fn typecheck_import(
+        &mut self,
+        import_: qualified::Import,
+    ) -> CheckResult<typed::Import> {
+        todo!()
+    }
+
     fn typecheck_fun_args(
         &mut self,
-        args: Vec<(String, untyped::Type)>,
+        args: Vec<(String, qualified::Type)>,
     ) -> CheckResult<Vec<(String, typed::Type)>, Vec<typed::Type>> {
         let v = args
             .into_iter()
             .map(|(n, t)| Ok((n, self.get_type(t)?)))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, String>>()?;
 
         self.closure_manager.append(v.clone());
 
@@ -213,7 +205,7 @@ impl Typechecker {
 
     fn typecheck_expr(
         &mut self,
-        expr: untyped::Expr,
+        expr: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         match expr {
             Expr::BinOp(lh, op, rh) => self.typecheck_binop(*lh, op, *rh),
@@ -239,22 +231,22 @@ impl Typechecker {
 
     fn typecheck_binop(
         &mut self,
-        lh: untyped::Expr,
+        lh: qualified::Expr,
         op: Op,
-        rh: untyped::Expr,
+        rh: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         let lh = self.typecheck_expr(lh)?;
         let rh = self.typecheck_expr(rh)?;
 
         if lh.t != rh.t {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Unequal binop types: {:?} != {:?}",
                 lh.t, rh.t
             ));
         }
 
         let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
                 lh.t, rh.t
             ));
@@ -279,7 +271,7 @@ impl Typechecker {
                 Expr::BinOp(Box::new(lh.v), op, Box::new(rh.v)),
                 Type::Simple(rht),
             ),
-            (lht, op) => CheckError::from_message(format!(
+            (lht, op) => Err(format!(
                 "Invalid operation type: {:?} {:?} {:?}",
                 lht, op, rh.t
             )),
@@ -302,7 +294,7 @@ impl Typechecker {
         let type_ = self.values.get(name.as_str());
 
         let Some(type_) = type_ else {
-            return CheckError::from_message(format!("Value with name {name} does not exist"))
+            return Err(format!("Value with name {name} does not exist"))
         };
 
         TypedValue::get(Expr::Value(name), (*type_).clone())
@@ -311,14 +303,14 @@ impl Typechecker {
     fn typecheck_assign(
         &mut self,
         name: String,
-        type_: untyped::Type,
-        expr: untyped::Expr,
+        type_: qualified::Type,
+        expr: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         let type_ = self.get_type(type_)?;
         let expr = self.typecheck_expr(expr)?;
 
         if type_ != expr.t {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Unequal assign types: {:?} != {:?}",
                 type_, expr.t
             ));
@@ -335,8 +327,8 @@ impl Typechecker {
 
     fn typecheck_chain(
         &mut self,
-        lh: untyped::Expr,
-        rh: untyped::Expr,
+        lh: qualified::Expr,
+        rh: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         let lh = self.typecheck_expr(lh)?;
         let rh = self.typecheck_expr(rh)?;
@@ -347,7 +339,7 @@ impl Typechecker {
     fn typecheck_call(
         &mut self,
         name: String,
-        args: Vec<untyped::Expr>,
+        args: Vec<qualified::Expr>,
     ) -> CheckResult<typed::Expr> {
         let (argvs, argts): (Vec<typed::Expr>, Vec<typed::Type>) = args
             .into_iter()
@@ -360,13 +352,13 @@ impl Typechecker {
         let f = self.functions.get(&*name);
 
         let Some((exp_argts, rt)) = f else {
-            return CheckError::from_message(
+            return Err(
                 format!("Function {name} not found")
             )
         };
 
         if exp_argts.len() < argts.len() {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Invalid number of arguments: expected: {:?}, actual: {:?}",
                 exp_argts.len(),
                 argts.len()
@@ -377,7 +369,7 @@ impl Typechecker {
                 exp_argts.iter().zip::<Vec<typed::Type>>(argts)
             {
                 if *exp_argt != argt {
-                    return CheckError::from_message(format!(
+                    return Err(format!(
                         "Invalid argument type: {:?} != {:?}",
                         exp_argt, argt
                     ));
@@ -397,7 +389,7 @@ impl Typechecker {
                 exp_argts.iter().zip::<Vec<typed::Type>>(argts)
             {
                 if *exp_argt != argt {
-                    return CheckError::from_message(format!(
+                    return Err(format!(
                         "Invalid argument type: {:?} != {:?}",
                         exp_argt, argt
                     ));
@@ -449,16 +441,16 @@ impl Typechecker {
 
     fn typecheck_if(
         &mut self,
-        be: untyped::Expr,
-        e1: untyped::Expr,
-        e2: untyped::Expr,
+        be: qualified::Expr,
+        e1: qualified::Expr,
+        e2: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         let be = self.typecheck_expr(be)?;
         let e1 = self.typecheck_expr(e1)?;
         let e2 = self.typecheck_expr(e2)?;
 
         if be.t != Type::Simple(SimpleType::Bool) || e1.t != e2.t {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Invalid if expression types: {:?} {:?} {:?}",
                 be.t, e1.t, e2.t
             ));
@@ -476,13 +468,13 @@ impl Typechecker {
         attr: String,
     ) -> CheckResult<typed::Expr> {
         let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(&*name) else {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Struct `{name}` does not exist.",
             ));
         };
 
         let Some((_, type_)) = struct_.clone().args.into_iter().find(|(n, _)| n == &attr) else {
-            return CheckError::from_message(format!(
+            return Err(format!(
                 "Struct `{name}` does not have attribute `{attr}`."
             ));
         };
@@ -492,12 +484,12 @@ impl Typechecker {
     fn typecheck_new(
         &mut self,
         name: String,
-        args: Vec<untyped::Expr>,
+        args: Vec<qualified::Expr>,
     ) -> CheckResult<typed::Expr> {
         let args = args
             .into_iter()
             .map(|e| Ok(self.typecheck_expr(e)?.v))
-            .collect::<Result<Vec<typed::Expr>, _>>()?;
+            .collect::<Result<Vec<typed::Expr>, String>>()?;
         let struct_args = self.types.get(&*name).unwrap();
         TypedValue::get(
             Expr::New(name.clone(), args),
@@ -723,7 +715,7 @@ mod tests {
     )]
     fn test_typecheck_call_error_invalid_arg_types(
         mut typechecker: Typechecker,
-        #[case] args: Vec<untyped::Expr>,
+        #[case] args: Vec<qualified::Expr>,
     ) {
         // given
         let name = "foo".to_string();

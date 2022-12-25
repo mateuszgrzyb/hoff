@@ -2,39 +2,40 @@ use clap::{arg, Parser, ValueEnum};
 
 #[derive(ValueEnum, Clone, Debug)]
 #[value(rename_all = "lower")]
-pub enum EmitLLVMTarget {
-    IrFile,
-    StdOut,
+pub enum RunMode {
+    JIT,
+    Compile,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
 #[value(rename_all = "lower")]
-pub enum RunMode {
-    /// asdf
-    JIT,
-    /// asdf
-    Compile,
+pub enum DumpMode {
+    None,
+    Ast,
+    QualifiedAst,
+    TypedAst,
+    LlvmIr,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+#[value(rename_all = "lower")]
+pub enum DumpTarget {
+    File,
+    StdOut,
 }
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     pub files: Vec<String>,
-    /// Print AST to stdout
-    #[arg(short = 'a', long, default_value_t = false)]
-    pub dump_ast: bool,
 
-    /// Print typed AST to stdout
-    #[arg(short = 't', long, default_value_t = false)]
-    pub dump_typed_ast: bool,
-
-    /// Emit LLVM IR to defined target
-    #[arg(short = 'e', long, default_value_t = false)]
-    pub emit_llvm: bool,
+    /// Choose dump mode
+    #[arg(short = 'd', long, value_enum, default_value_t = DumpMode::None)]
+    pub dump_mode: DumpMode,
 
     /// Print LLVM IR to stdout
-    #[arg(short = 'f', long, value_enum, default_value_t = EmitLLVMTarget::IrFile)]
-    pub emit_llvm_target: EmitLLVMTarget,
+    #[arg(short = 't', long, value_enum, default_value_t = DumpTarget::StdOut)]
+    pub dump_target: DumpTarget,
 
     /// Set optimization level:
     /// 0 = None,

@@ -33,10 +33,7 @@ fn test_compile(
 
     // when
     let input_file = "tests/data/".to_string() + input_file;
-    let output = cli
-        .arg(input_file)
-        .output()
-        .expect("Failed to execute command");
+    let output = cli.arg(input_file).output().unwrap();
 
     // then
     let stdout = String::from_utf8(output.stdout)
