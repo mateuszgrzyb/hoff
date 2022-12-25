@@ -91,7 +91,7 @@ impl Typechecker {
         let decls = m
             .decls
             .into_iter()
-            .map(|d| Ok(self.typecheck_decl(d)?.v))
+            .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
             .collect::<Result<_, String>>()?;
 
         Ok(Mod { name, decls })
@@ -167,7 +167,7 @@ impl Typechecker {
         let args = struct_
             .args
             .into_iter()
-            .map(|(n, t)| Ok((n, self.get_type(t)?)))
+            .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
             .collect::<Result<Vec<_>, String>>()?;
 
         self.types.insert(name.clone(), args.clone());
@@ -193,7 +193,7 @@ impl Typechecker {
     ) -> CheckResult<Vec<(String, typed::Type)>, Vec<typed::Type>> {
         let v = args
             .into_iter()
-            .map(|(n, t)| Ok((n, self.get_type(t)?)))
+            .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
             .collect::<Result<Vec<_>, String>>()?;
 
         self.closure_manager.append(v.clone());
@@ -488,7 +488,7 @@ impl Typechecker {
     ) -> CheckResult<typed::Expr> {
         let args = args
             .into_iter()
-            .map(|e| Ok(self.typecheck_expr(e)?.v))
+            .map(|e| self.typecheck_expr(e).map(|tv| tv.v))
             .collect::<Result<Vec<typed::Expr>, String>>()?;
         let struct_args = self.types.get(&*name).unwrap();
         TypedValue::get(

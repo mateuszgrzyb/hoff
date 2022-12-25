@@ -34,7 +34,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn repl(args: Args) -> Result<(), Box<dyn Error>> {
     let context = Context::create();
-    let mut repl = REPL::create(&context);
     let expr_parser = ExprParser::new();
 
     loop {
@@ -44,21 +43,15 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
         }
         let input = input.split(";;").next().unwrap_or("").to_string();
 
-        let expr = match expr_parser.parse(&input) {
-            Err(err) => {
-                println!("Parse error: {}", err);
-                continue;
-            }
-            Ok(expr) => expr,
-        };
+        let Ok(expr) = expr_parser.parse(&input).map_err(|err| {
+            println!("Parse error: {}", err);
+        }) else { continue };
 
-        let result = match repl.eval(expr) {
-            Err(err) => {
-                println!("Eval error: {}", err);
-                continue;
-            }
-            Ok(result) => result,
-        };
+        let mut repl = REPL::create(&context);
+
+        let Ok(result) = repl.eval(expr).map_err(|err| {
+            println!("Eval error: {}", err);
+        }) else { continue };
 
         println!("{}", result)
     }
@@ -69,10 +62,9 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
         .files
         .into_iter()
         .map(|name| {
-            let file = std::fs::read_to_string(name.clone())?;
-            Ok((name, file))
+            std::fs::read_to_string(name.clone()).map(|file| (name, file))
         })
-        .collect::<Result<Vec<(String, String)>, Box<dyn Error>>>()?;
+        .collect::<Result<Vec<(String, String)>, _>>()?;
 
     let parser = ModParser::new();
 
@@ -95,6 +87,13 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
             qualifier.qualify(module)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    if let DumpMode::QualifiedAst = args.dump_mode {
+        for module in qualified_modules {
+            println!("{module:#?}")
+        }
+        return Ok(());
+    };
 
     let typed_modules = qualified_modules
         .into_iter()

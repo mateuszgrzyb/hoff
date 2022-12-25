@@ -17,7 +17,7 @@ impl ImportQualifier {
         let decls = m
             .decls
             .into_iter()
-            .map(|d| Ok(self.qualify_decl(d)?))
+            .map(|d| self.qualify_decl(d))
             .collect::<Result<_, String>>()?;
 
         Ok(Mod { name, decls })
