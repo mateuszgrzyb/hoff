@@ -14,7 +14,6 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
-use std::error::Error;
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
@@ -390,7 +389,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_assign(
         &mut self,
         name: String,
-        type_: Type,
+        _: Type,
         val: Expr,
     ) -> Value<'ctx> {
         let val = self.compile_expr(val);
@@ -405,7 +404,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_call(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
         let f = *self.functions.get(name.as_str()).unwrap();
-        let closure = self.closures.get(&*name).unwrap().clone();
+        let closure = self.closures.get(&*name).unwrap_or(&Vec::new()).clone();
 
         let standard_args = args
             .into_iter()

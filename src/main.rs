@@ -47,7 +47,7 @@ fn repl(args: Args) -> Result<(), Box<dyn Error>> {
             println!("Parse error: {}", err);
         }) else { continue };
 
-        let mut repl = REPL::create(&context);
+        let mut repl = REPL::create(&context, args.o);
 
         let Ok(result) = repl.eval(expr).map_err(|err| {
             println!("Eval error: {}", err);
@@ -155,7 +155,7 @@ pub fn compile(args: Args) -> Result<(), Box<dyn Error>> {
 
     let backend: Box<dyn Backend> = match args.mode {
         RunMode::JIT => Box::new(Interpreter::create(m, args.o)),
-        RunMode::Compile => Box::new(Compiler::create()),
+        RunMode::Compile => Box::new(Compiler::create(m, args.o)),
     };
 
     backend.run()?;

@@ -1,9 +1,9 @@
 use crate::ast::{typed, untyped, SimpleType};
+use crate::backend::get_opt_level;
 use crate::codegen::CodeGen;
 use crate::typecheck::Typechecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
-use inkwell::OptimizationLevel;
 
 pub struct REPL<'ctx> {
     typechecker: Typechecker,
@@ -12,11 +12,12 @@ pub struct REPL<'ctx> {
 }
 
 impl<'ctx> REPL<'ctx> {
-    pub fn create(context: &'ctx Context) -> Self {
+    pub fn create(context: &'ctx Context, opt_level: u32) -> Self {
+        let opt_level = get_opt_level(opt_level);
         let codegen = CodeGen::create(&context, true);
         let execution_engine = codegen
             .module
-            .create_jit_execution_engine(OptimizationLevel::None)
+            .create_jit_execution_engine(opt_level)
             .unwrap();
         Self {
             typechecker: Typechecker::create(),

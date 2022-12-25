@@ -12,7 +12,7 @@ fn command() -> Command {
 
 #[fixture]
 fn cli(mut command: Command) -> Command {
-    command.args(["--emit-llvm", "--emit-llvm-target", "stdout"]);
+    command.args(["-d", "llvmir", "-t", "stdout"]);
     command
 }
 
