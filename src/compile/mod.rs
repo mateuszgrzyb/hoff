@@ -4,9 +4,11 @@ use crate::library::ast::{qualified, typed, untyped};
 use crate::library::backend::{Backend, Compiler, Interpreter};
 use crate::library::cli::{Args, DumpMode, RunMode};
 use crate::library::codegen::CodeGen;
-use crate::library::import_qualifier::ImportQualifier;
+use crate::library::import_qualifier::{
+    ImportPreQualifier, ImportQualifier, TypeCheckPreQualified,
+};
 use crate::library::parser::grammar::ModParser;
-use crate::library::typecheck::Typechecker;
+use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use std::error::Error;
@@ -89,7 +91,11 @@ impl Compile {
             .into_iter()
             .map(move |(name, file)| {
                 let decls = self.parser.parse(&file).unwrap();
-                untyped::Mod { name, decls }
+                untyped::Mod {
+                    name,
+                    decls,
+                    imports: (),
+                }
             })
             .collect()
     }
@@ -101,11 +107,20 @@ impl Compile {
     where
         MS: Iterator<Item = untyped::Mod>,
     {
-        ms.map(|module| {
-            let mut qualifier = ImportQualifier::create();
-            qualifier.qualify(module)
-        })
-        .collect()
+        let mut ipq = ImportPreQualifier::create();
+        let mut tcpq = TypeCheckPreQualified::create();
+
+        let ms = ms.collect::<Vec<_>>();
+
+        let (fds, ss) = ipq.pre_qualify(&ms);
+        let (fds, ss) = tcpq.run(fds, ss).map_err(|err| err.to_string())?;
+
+        let mut qualifier = ImportQualifier::create(&fds, &ss);
+
+        ms.clone()
+            .into_iter()
+            .map(|module| qualifier.qualify(module))
+            .collect()
     }
 
     fn typecheck_modules<QMS>(
@@ -116,8 +131,8 @@ impl Compile {
         QMS: Iterator<Item = qualified::Mod>,
     {
         qms.map(|module| {
-            let mut typechecker = Typechecker::create();
-            typechecker.typecheck(module)
+            let mut typechecker = TypeChecker::create();
+            typechecker.check(module)
         })
         .collect()
     }
@@ -130,9 +145,7 @@ impl Compile {
             .map(|(i, module)| {
                 let context = &self.contexts[i];
                 let mut codegen = CodeGen::create(context, true);
-
                 codegen.compile_module(module);
-
                 codegen
             })
             .collect()

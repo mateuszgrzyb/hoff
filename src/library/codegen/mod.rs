@@ -120,6 +120,14 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub fn compile_module(&mut self, m: Mod) {
+        for s in m.imports.structs {
+            self.compile_struct(s)
+        }
+
+        for fd in m.imports.fundecls {
+            self.compile_import_fun(fd)
+        }
+
         self.module.set_name(m.name.as_str());
         let mut module_name = m.name.clone();
         module_name.push_str(".ir");
@@ -138,10 +146,29 @@ impl<'ctx> CodeGen<'ctx> {
             Decl::Struct(s) => {
                 self.compile_struct(s);
             }
-            Decl::Import(i) => {
-                self.compile_import(i);
+            Decl::Import(_) => {
+                // imports are compiled before all declarations
             }
         }
+    }
+
+    fn compile_import_fun(&mut self, f: FunDecl) {
+        let (arg_names, arg_types) = &f.args
+            .clone()
+            .into_iter()
+            .map(|(n, t)| (n, self.get_type(&t).into()))
+            .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
+
+        let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
+
+        let function =
+            self.module.add_function(f.name.as_str(), fn_type, None);
+
+        for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
+            p.set_name(n.as_str());
+        }
+
+        self.functions.insert(f.name, function);
     }
 
     fn compile_fun(
@@ -219,30 +246,6 @@ impl<'ctx> CodeGen<'ctx> {
         s.set_body(&args[..], true);
 
         self.structs.insert(name, (struct_.clone(), s));
-    }
-
-    fn compile_import(&mut self, import_: Import) {
-        match import_ {
-            Import::Fun(f) => self.compile_import_fun(f),
-            Import::Struct(s) => self.compile_struct(s),
-        }
-    }
-
-    fn compile_import_fun(&mut self, f: Fun) {
-        let (arg_names, arg_types) = &f.args
-            .clone()
-            .into_iter()
-            .map(|(n, t)| (n, self.get_type(&t).into()))
-            .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
-
-        let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
-
-        let function =
-            self.module.add_function(f.name.as_str(), fn_type, None);
-
-        for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
-            p.set_name(n.as_str());
-        }
     }
 
     fn compile_expr(&mut self, e: Expr) -> Value<'ctx> {
@@ -605,6 +608,7 @@ mod tests {
                     body: Expr::Lit(Lit::Int(32)),
                 }),
             ]),
+            imports: Imports::create(),
         };
         let expected_module_str = r#"; ModuleID = 'test_1'
 source_filename = "test_1.ir"

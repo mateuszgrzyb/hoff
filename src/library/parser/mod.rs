@@ -246,6 +246,7 @@ mod test {
                     body: (Expr::Value("a".to_string())),
                 }),
             ]),
+            imports: (),
         };
 
         // when

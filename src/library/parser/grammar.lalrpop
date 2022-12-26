@@ -8,7 +8,7 @@ match {
     r"//[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
     r"#[^\n\r]*[\n\r]*" => { }, // Skip `# comments`
     r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip `/* comments */`
-    "fun", "val", "type", "import",
+    "fun", "val", "type", "from", "import",
     "true" => TRUE,
     "false" => FALSE,
     "if", "else",
@@ -153,10 +153,17 @@ Struct: Struct = {
         => Struct { name, args },
 };
 
+Import: Import = {
+    "from" <qualifier:DoubleColon<Id>> "import" <name:Id>
+        => (qualifier, name),
+    "from" <qualifier:DoubleColon<Id>> "import" <name:Tid>
+        => (qualifier, name),
+};
 
 Decl: Decl = {
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
+    <Import> => Decl::Import(<>),
 };
 
 pub Mod: Vec<Decl> =

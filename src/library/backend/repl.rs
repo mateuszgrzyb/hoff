@@ -1,12 +1,12 @@
 use crate::library::ast::{typed, untyped, SimpleType};
 use crate::library::backend::get_opt_level;
 use crate::library::codegen::CodeGen;
-use crate::library::typecheck::Typechecker;
+use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
 
 pub struct REPL<'ctx> {
-    typechecker: Typechecker,
+    typechecker: TypeChecker,
     codegen: CodeGen<'ctx>,
     execution_engine: ExecutionEngine<'ctx>,
 }
@@ -20,7 +20,7 @@ impl<'ctx> REPL<'ctx> {
             .create_jit_execution_engine(opt_level)
             .unwrap();
         Self {
-            typechecker: Typechecker::create(),
+            typechecker: TypeChecker::create(),
             codegen,
             execution_engine,
         }
@@ -73,6 +73,7 @@ impl<'ctx> REPL<'ctx> {
         Ok(typed::Mod {
             name: "repl".to_string(),
             decls: Vec::from([typed::Decl::Fun(main)]),
+            imports: typed::Imports::create(),
         })
     }
 }

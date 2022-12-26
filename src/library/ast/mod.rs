@@ -38,6 +38,13 @@ pub enum Expr<T, C, S> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct FunDecl<T> {
+    pub name: String,
+    pub args: Vec<(String, Type<T>)>,
+    pub rt: Type<T>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Fun<T, C, S> {
     pub name: String,
     pub args: Vec<(String, Type<T>)>,
@@ -59,9 +66,10 @@ pub enum Decl<T, C, S, I> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Mod<T, C, S, I> {
+pub struct Mod<T, C, S, I, IS> {
     pub name: String,
     pub decls: Vec<Decl<T, C, S, I>>,
+    pub imports: IS,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -82,9 +90,24 @@ pub enum SimpleType {
 pub type Closure = Vec<(String, Type<SimpleType>)>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum QualifiedImport<T, C, S> {
-    Fun(Fun<T, C, S>),
+pub enum QualifiedImport<T> {
+    Fun(FunDecl<T>),
     Struct(Struct<T>),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Imports {
+    pub fundecls: Vec<FunDecl<SimpleType>>,
+    pub structs: Vec<Struct<SimpleType>>,
+}
+
+impl Imports {
+    pub fn create() -> Self {
+        Self {
+            fundecls: Vec::new(),
+            structs: Vec::new(),
+        }
+    }
 }
 
 pub trait NamedModule {
@@ -97,10 +120,11 @@ pub mod untyped {
 
     pub type Expr = super::Expr<String, (), ()>;
     pub type Fun = super::Fun<String, (), ()>;
+    pub type FunDecl = super::FunDecl<String>;
     pub type Struct = super::Struct<String>;
     pub type Import = (Vec<String>, String);
     pub type Decl = super::Decl<String, (), (), Import>;
-    pub type Mod = super::Mod<String, (), (), Import>;
+    pub type Mod = super::Mod<String, (), (), Import, ()>;
     pub type Type = super::Type<String>;
 
     impl NamedModule for Mod {
@@ -111,15 +135,17 @@ pub mod untyped {
 }
 
 pub mod qualified {
+    pub use super::Imports;
     use super::NamedModule;
     pub use super::{Lit, Op};
+    use crate::library::ast::SimpleType;
 
     pub type Expr = super::Expr<String, (), ()>;
     pub type Fun = super::Fun<String, (), ()>;
     pub type Struct = super::Struct<String>;
-    pub type Import = super::QualifiedImport<String, (), ()>;
+    pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<String, (), (), Import>;
-    pub type Mod = super::Mod<String, (), (), Import>;
+    pub type Mod = super::Mod<String, (), (), Import, Imports>;
     pub type Type = super::Type<String>;
 
     impl NamedModule for Mod {
@@ -127,19 +153,34 @@ pub mod qualified {
             self.name
         }
     }
+
+    impl Mod {
+        pub fn empty() -> Self {
+            Self {
+                name: "".to_string(),
+                decls: vec![],
+                imports: Imports {
+                    fundecls: vec![],
+                    structs: vec![],
+                },
+            }
+        }
+    }
 }
 
 pub mod typed {
+    pub use super::Imports;
     use super::NamedModule;
     pub use super::{Closure, SimpleType};
     pub use super::{Lit, Op};
 
     pub type Expr = super::Expr<SimpleType, Closure, Struct>;
     pub type Fun = super::Fun<SimpleType, Closure, Struct>;
+    pub type FunDecl = super::FunDecl<SimpleType>;
     pub type Struct = super::Struct<SimpleType>;
-    pub type Import = super::QualifiedImport<SimpleType, Closure, Struct>;
+    pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<SimpleType, Closure, Struct, Import>;
-    pub type Mod = super::Mod<SimpleType, Closure, Struct, Import>;
+    pub type Mod = super::Mod<SimpleType, Closure, Struct, Import, Imports>;
     pub type Type = super::Type<SimpleType>;
 
     impl NamedModule for Mod {

@@ -1,0 +1,13 @@
+
+from input import Student
+from input2 import get_name
+from input2 import get_age
+from input3 import create_student
+
+
+fun main (): Int {
+    val s: Student = create_student("ala", 32);
+    val name: String = get_name(s);
+    val age: Int = get_age(s);
+    33
+}
