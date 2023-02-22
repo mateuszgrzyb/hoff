@@ -1,32 +1,52 @@
 use crate::library::ast::{typed, untyped, SimpleType};
 use crate::library::backend::get_opt_level;
 use crate::library::codegen::CodeGen;
+use crate::library::import_qualifier::ImportQualifier;
 use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
 
-pub struct REPL<'ctx> {
+pub struct REPL<'init, 'ctx> {
     typechecker: TypeChecker,
+    qualifier: ImportQualifier<'init>,
     codegen: CodeGen<'ctx>,
     execution_engine: ExecutionEngine<'ctx>,
+    decls: Vec<untyped::Decl>,
 }
 
-impl<'ctx> REPL<'ctx> {
-    pub fn create(context: &'ctx Context, opt_level: u32) -> Self {
+impl<'init, 'ctx> REPL<'init, 'ctx> {
+    pub fn create(
+        fds: &'init Vec<typed::FunDecl>,
+        ss: &'init Vec<typed::Struct>,
+        context: &'ctx Context,
+        opt_level: u32,
+    ) -> Self {
         let opt_level = get_opt_level(opt_level);
         let codegen = CodeGen::create(&context, true);
         let execution_engine = codegen
             .module
             .create_jit_execution_engine(opt_level)
             .unwrap();
+
+        let import_qualifier = ImportQualifier::create(&fds, &ss);
+
         Self {
             typechecker: TypeChecker::create(),
+            qualifier: import_qualifier,
             codegen,
             execution_engine,
+            decls: Vec::new(),
         }
     }
 
-    pub fn eval(&mut self, expr: untyped::Expr) -> Result<String, String> {
+    pub fn eval(&mut self, repl: untyped::Repl) -> Result<String, String> {
+        match repl {
+            untyped::Repl::Expr(expr) => self.eval_expr(expr),
+            untyped::Repl::Decl(decl) => self.eval_decl(decl),
+        }
+    }
+
+    fn eval_expr(&mut self, expr: untyped::Expr) -> Result<String, String> {
         let (body, rt) = self.typechecker.get_type_of_expr(expr.clone())?;
 
         let main_mod = self.create_main(body, rt.clone())?;
@@ -58,6 +78,11 @@ impl<'ctx> REPL<'ctx> {
         Ok(return_value_repr)
     }
 
+    fn eval_decl(&mut self, decl: untyped::Decl) -> Result<String, String> {
+        self.decls.push(decl);
+        Ok("".to_string())
+    }
+
     fn create_main(
         &mut self,
         body: typed::Expr,
@@ -70,9 +95,16 @@ impl<'ctx> REPL<'ctx> {
             body,
         };
 
+        let decls = self.decls.clone();
+        println!("{:?}", decls);
+        let decls = self.qualifier.qualify_decls(decls)?;
+        let mut decls = self.typechecker.typecheck_decls(decls)?;
+
+        decls.push(typed::Decl::Fun(main));
+
         Ok(typed::Mod {
             name: "repl".to_string(),
-            decls: Vec::from([typed::Decl::Fun(main)]),
+            decls,
             imports: typed::Imports::create(),
         })
     }

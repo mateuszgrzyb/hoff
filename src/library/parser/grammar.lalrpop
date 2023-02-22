@@ -160,7 +160,7 @@ Import: Import = {
         => (qualifier, name),
 };
 
-Decl: Decl = {
+pub Decl: Decl = {
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
     <Import> => Decl::Import(<>),

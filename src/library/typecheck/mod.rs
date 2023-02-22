@@ -132,13 +132,7 @@ impl TypeChecker {
         self.module = m;
 
         let name = self.module.name.clone();
-        let decls = self
-            .module
-            .decls
-            .clone()
-            .into_iter()
-            .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
-            .collect::<Result<_, String>>()?;
+        let decls = self.typecheck_decls(self.module.decls.clone())?;
         let imports = self.module.imports.clone();
 
         Ok(Mod {
@@ -146,6 +140,15 @@ impl TypeChecker {
             decls,
             imports,
         })
+    }
+
+    pub fn typecheck_decls(
+        &mut self,
+        ds: Vec<qualified::Decl>,
+    ) -> Result<Vec<typed::Decl>, String> {
+        ds.into_iter()
+            .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
+            .collect::<Result<_, _>>()
     }
 
     fn typecheck_decl(

@@ -28,11 +28,7 @@ impl<'init> ImportQualifier<'init> {
         m: untyped::Mod,
     ) -> QualifyResult<qualified::Mod> {
         let name = m.name;
-        let decls = m
-            .decls
-            .into_iter()
-            .map(|d| self.qualify_decl(d))
-            .collect::<Result<_, String>>()?;
+        let decls = self.qualify_decls(m.decls)?;
         let imports = qualified::Imports {
             fundecls: self.fundecls.clone(),
             structs: self.structs.clone(),
@@ -43,6 +39,16 @@ impl<'init> ImportQualifier<'init> {
             decls,
             imports,
         })
+    }
+
+    pub fn qualify_decls(
+        &mut self,
+        decls: Vec<untyped::Decl>,
+    ) -> QualifyResult<Vec<qualified::Decl>> {
+        decls
+            .into_iter()
+            .map(|d| self.qualify_decl(d))
+            .collect::<Result<Vec<_>, String>>()
     }
 
     fn qualify_decl(

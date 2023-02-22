@@ -73,6 +73,12 @@ pub struct Mod<T, C, S, I, IS> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Repl<T, C, S, I> {
+    Expr(Expr<T, C, S>),
+    Decl(Decl<T, C, S, I>),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type<T> {
     Simple(T),
     Function(Vec<Type<T>>),
@@ -125,6 +131,7 @@ pub mod untyped {
     pub type Import = (Vec<String>, String);
     pub type Decl = super::Decl<String, (), (), Import>;
     pub type Mod = super::Mod<String, (), (), Import, ()>;
+    pub type Repl = super::Repl<String, (), (), Import>;
     pub type Type = super::Type<String>;
 
     impl NamedModule for Mod {
@@ -146,6 +153,7 @@ pub mod qualified {
     pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<String, (), (), Import>;
     pub type Mod = super::Mod<String, (), (), Import, Imports>;
+    pub type Repl = super::Repl<String, (), (), Import>;
     pub type Type = super::Type<String>;
 
     impl NamedModule for Mod {
@@ -181,6 +189,7 @@ pub mod typed {
     pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<SimpleType, Closure, Struct, Import>;
     pub type Mod = super::Mod<SimpleType, Closure, Struct, Import, Imports>;
+    pub type Repl = super::Repl<SimpleType, Closure, Struct, Import>;
     pub type Type = super::Type<SimpleType>;
 
     impl NamedModule for Mod {
