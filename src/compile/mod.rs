@@ -32,7 +32,7 @@ impl Compile {
     pub fn compile(&self) -> Result<(), Box<dyn Error>> {
         let files = self.read_files()?;
 
-        let modules = self.parse_files(files).into_iter();
+        let modules = self.parse_files(files)?.into_iter();
 
         if let DumpMode::Ast = self.args.dump_mode {
             return utils::dump(&self.args, modules);
@@ -65,37 +65,42 @@ impl Compile {
 
         let m = self.link_modules(codegens)?;
 
-        let backend: Box<dyn Backend> = match self.args.mode {
-            RunMode::JIT => Box::new(Interpreter::create(m, self.args.o)),
-            RunMode::Compile => Box::new(Compiler::create(m, self.args.o)),
+        match self.args.mode {
+            RunMode::JIT => Interpreter::create(m, self.args.o).run()?,
+            RunMode::Compile => Compiler::create(m, self.args.o).run()?,
         };
-
-        backend.run()?;
 
         Ok(())
     }
 
-    fn read_files(&self) -> Result<Vec<(String, String)>, std::io::Error> {
+    fn read_files(&self) -> Result<Vec<(String, String)>, Box<dyn Error>> {
         self.args
             .files
             .clone()
             .into_iter()
             .map(|name| {
-                std::fs::read_to_string(name.clone()).map(|file| (name, file))
+                std::fs::read_to_string(name.clone())
+                    .map(|file| (name, file))
+                    .map_err(|err| err.into())
             })
             .collect()
     }
 
-    fn parse_files(&self, files: Vec<(String, String)>) -> Vec<untyped::Mod> {
+    fn parse_files(
+        &self,
+        files: Vec<(String, String)>,
+    ) -> Result<Vec<untyped::Mod>, Box<dyn Error>> {
         files
             .into_iter()
             .map(move |(name, file)| {
-                let decls = self.parser.parse(&file).unwrap();
-                untyped::Mod {
+                let decls =
+                    self.parser.parse(&file).map_err(|err| err.to_string())?;
+                let imports = ();
+                Ok(untyped::Mod {
                     name,
                     decls,
-                    imports: (),
-                }
+                    imports,
+                })
             })
             .collect()
     }
