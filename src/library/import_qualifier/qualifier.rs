@@ -1,4 +1,4 @@
-use crate::library::ast::typed::{FunDecl, Struct};
+use crate::library::ast::typed::{FunDecl, Struct, ValDecl};
 use crate::library::ast::{qualified, untyped, Decl, Mod};
 
 type QualifyResult<V> = Result<V, String>;
@@ -6,20 +6,25 @@ type QualifyResult<V> = Result<V, String>;
 pub struct ImportQualifier<'init> {
     global_fundecls: &'init Vec<FunDecl>,
     global_structs: &'init Vec<Struct>,
+    global_vals: &'init Vec<ValDecl>,
     fundecls: Vec<FunDecl>,
     structs: Vec<Struct>,
+    vals: Vec<ValDecl>,
 }
 
 impl<'init> ImportQualifier<'init> {
     pub fn create(
         fundecls: &'init Vec<FunDecl>,
         structs: &'init Vec<Struct>,
+        vals: &'init Vec<ValDecl>,
     ) -> Self {
         Self {
             global_fundecls: fundecls,
             global_structs: structs,
+            global_vals: vals,
             fundecls: Vec::new(),
             structs: Vec::new(),
+            vals: Vec::new(),
         }
     }
 
@@ -32,6 +37,7 @@ impl<'init> ImportQualifier<'init> {
         let imports = qualified::Imports {
             fundecls: self.fundecls.clone(),
             structs: self.structs.clone(),
+            vals: self.vals.clone(),
         };
 
         Ok(Mod {
@@ -58,6 +64,7 @@ impl<'init> ImportQualifier<'init> {
         match d {
             Decl::Fun(f) => self.qualify_fun(f).map(|f| Decl::Fun(f)),
             Decl::Struct(s) => self.qualify_struct(s).map(|s| Decl::Struct(s)),
+            Decl::Val(v) => self.qualify_val(v).map(|v| Decl::Val(v)),
             Decl::Import(i) => self.qualify_import(i).map(|i| Decl::Import(i)),
         }
     }
@@ -74,6 +81,13 @@ impl<'init> ImportQualifier<'init> {
         s: untyped::Struct,
     ) -> QualifyResult<qualified::Struct> {
         Ok(s)
+    }
+
+    fn qualify_val(
+        &mut self,
+        v: untyped::Val,
+    ) -> QualifyResult<qualified::Val> {
+        Ok(v)
     }
 
     fn qualify_import(
@@ -101,6 +115,16 @@ impl<'init> ImportQualifier<'init> {
             self.fundecls.push(fd.clone());
             return Ok(qualified::Import::Fun(fd));
         };
+
+        if let Some(v) = self
+            .global_vals
+            .into_iter()
+            .find(|v| v.name == name)
+            .cloned()
+        {
+            self.vals.push(v.clone());
+            return Ok(qualified::Import::Val(v));
+        }
 
         Err(format!("{} cannot be imported", name))
     }

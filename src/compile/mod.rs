@@ -117,10 +117,11 @@ impl Compile {
 
         let ms = ms.collect::<Vec<_>>();
 
-        let (fds, ss) = ipq.pre_qualify(&ms);
-        let (fds, ss) = tcpq.run(fds, ss).map_err(|err| err.to_string())?;
+        let (fds, ss, vs) = ipq.pre_qualify(&ms);
+        let (fds, ss, vs) =
+            tcpq.run(fds, ss, vs).map_err(|err| err.to_string())?;
 
-        let mut qualifier = ImportQualifier::create(&fds, &ss);
+        let mut qualifier = ImportQualifier::create(&fds, &ss, &vs);
 
         ms.clone()
             .into_iter()

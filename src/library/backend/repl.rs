@@ -18,6 +18,7 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
     pub fn create(
         fds: &'init Vec<typed::FunDecl>,
         ss: &'init Vec<typed::Struct>,
+        vs: &'init Vec<typed::ValDecl>,
         context: &'ctx Context,
         opt_level: u32,
     ) -> Self {
@@ -28,7 +29,7 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
             .create_jit_execution_engine(opt_level)
             .unwrap();
 
-        let import_qualifier = ImportQualifier::create(&fds, &ss);
+        let import_qualifier = ImportQualifier::create(&fds, &ss, &vs);
 
         Self {
             typechecker: TypeChecker::create(),

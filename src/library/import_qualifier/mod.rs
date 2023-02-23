@@ -5,3 +5,7 @@ mod typecheck_pre_qualified;
 pub use pre_qualifier::ImportPreQualifier;
 pub use qualifier::ImportQualifier;
 pub use typecheck_pre_qualified::TypeCheckPreQualified;
+
+pub trait Nameable {
+    fn get_name(&self) -> String;
+}

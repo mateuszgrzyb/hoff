@@ -1,0 +1,6 @@
+
+val i: Int = 33
+
+fun main(): Int {
+    i
+}

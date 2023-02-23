@@ -3,7 +3,7 @@ mod namespace;
 
 use crate::library::ast::{
     qualified, typed, Decl, Expr, Fun, FunDecl, Imports, Lit, Mod, Op,
-    SimpleType, Struct, Type,
+    SimpleType, Struct, Type, Val,
 };
 use closure_manager::ClosureManager;
 use namespace::Namespace;
@@ -164,6 +164,10 @@ impl TypeChecker {
                 v: Decl::Struct(s.v),
                 t: s.t,
             }),
+            Decl::Val(v) => self.typecheck_val(v).map(|v| TypedValue {
+                v: Decl::Val(v.v),
+                t: v.t,
+            }),
             Decl::Import(i) => self.typecheck_import(i).map(|i| TypedValue {
                 v: Decl::Import(i.v),
                 t: i.t,
@@ -234,6 +238,33 @@ impl TypeChecker {
         )
     }
 
+    fn typecheck_val(
+        &mut self,
+        value: qualified::Val,
+    ) -> CheckResult<typed::Val> {
+        let name = value.name;
+        let t = self.get_type(value.t)?;
+        let expr = self.typecheck_expr(value.expr)?;
+
+        if t != expr.t {
+            return Err(format!(
+                "Declared type and value type does not match: {:?} != {:?}",
+                t, expr.t,
+            ));
+        }
+
+        self.values.insert(name.clone(), expr.t.clone());
+
+        Ok(TypedValue {
+            v: Val {
+                name,
+                t,
+                expr: expr.v,
+            },
+            t: expr.t,
+        })
+    }
+
     fn typecheck_import(
         &mut self,
         import_: qualified::Import,
@@ -246,6 +277,7 @@ impl TypeChecker {
                 Type::Function(ft)
             }
             typed::Import::Struct(s) => Type::Simple(SimpleType::Struct(s)),
+            typed::Import::Val(v) => v.t,
         };
         TypedValue::get(import_, type_)
     }

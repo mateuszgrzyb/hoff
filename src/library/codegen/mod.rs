@@ -128,6 +128,10 @@ impl<'ctx> CodeGen<'ctx> {
             self.compile_import_fun(fd)
         }
 
+        for v in m.imports.vals {
+            self.compile_import_val(v)
+        }
+
         self.module.set_name(m.name.as_str());
         let mut module_name = m.name.clone();
         module_name.push_str(".ir");
@@ -145,6 +149,9 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Decl::Struct(s) => {
                 self.compile_struct(s);
+            }
+            Decl::Val(v) => {
+                self.compile_val(v);
             }
             Decl::Import(_) => {
                 // imports are compiled before all declarations
@@ -246,6 +253,25 @@ impl<'ctx> CodeGen<'ctx> {
         s.set_body(&args[..], true);
 
         self.structs.insert(name, (struct_.clone(), s));
+    }
+
+    fn compile_import_val(&mut self, value: ValDecl) {
+        let f = FunDecl {
+            name: value.name,
+            args: Vec::new(),
+            rt: value.t,
+        };
+        self.compile_import_fun(f);
+    }
+
+    fn compile_val(&mut self, value: Val) {
+        let f = Fun {
+            name: value.name,
+            args: Vec::new(),
+            rt: value.t,
+            body: value.expr,
+        };
+        self.compile_fun(f, Vec::new());
     }
 
     fn compile_expr(&mut self, e: Expr) -> Value<'ctx> {
@@ -382,11 +408,25 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn compile_value(&self, name: String) -> Value<'ctx> {
-        *self.closure.get(name.as_str()).unwrap_or(
-            self.values
-                .get(name.as_str())
-                .unwrap_or_else(|| panic!("unknown value {name}")),
-        )
+        if let Some(value) = self.closure.get(name.as_str()) {
+            return value.clone();
+        }
+
+        if let Some(value) = self.values.get(name.as_str()) {
+            return value.clone();
+        }
+
+        if let Some(f) = self.functions.get(name.as_str()) {
+            let value = self
+                .builder
+                .build_call(f.clone(), &[], "call")
+                .try_as_basic_value()
+                .left()
+                .unwrap();
+            return value;
+        }
+
+        panic!("unknown value {name}")
     }
 
     fn compile_assign(
