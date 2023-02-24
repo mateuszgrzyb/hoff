@@ -1,0 +1,6 @@
+
+from input2 import j
+
+fun main(): Int {
+    j
+}

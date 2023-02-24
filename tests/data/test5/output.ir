@@ -7,9 +7,3 @@ define i32 @i() {
 entry:
   ret i32 33
 }
-
-define i32 @main() {
-entry:
-  %call = call i32 @i()
-  ret i32 %call
-}

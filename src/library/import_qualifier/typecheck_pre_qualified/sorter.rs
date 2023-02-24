@@ -72,7 +72,7 @@ impl<T: Nameable + Clone> Sorter<T> {
     ) -> Result<(), Box<dyn Error>> {
         match mark {
             Mark::Perm => return Ok(()),
-            Mark::Temp => return Err("".into()),
+            Mark::Temp => return Err("cyclic reference found".into()),
             Mark::None => {
                 let name = name.clone();
                 let elem = elem.clone();

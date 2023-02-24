@@ -1,0 +1,13 @@
+; ModuleID = 'tests/data/test5/input2.hff'
+source_filename = "tests/data/test5/input2.hff.ir"
+
+declare i32 @puts(i8*)
+
+declare i32 @i()
+
+define i32 @j() {
+entry:
+  %call = call i32 @i()
+  %add = add i32 %call, 1
+  ret i32 %add
+}

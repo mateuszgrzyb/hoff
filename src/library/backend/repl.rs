@@ -97,7 +97,6 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
         };
 
         let decls = self.decls.clone();
-        println!("{:?}", decls);
         let decls = self.qualifier.qualify_decls(decls)?;
         let mut decls = self.typechecker.typecheck_decls(decls)?;
 

@@ -91,8 +91,8 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
 
-    println!("{}", stdout);
-    println!("{}", stderr);
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
 
     assert!(stderr.is_empty());
     assert_eq!(stdout, expected_output);
