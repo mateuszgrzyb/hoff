@@ -58,6 +58,7 @@ where
 #[case("test2")]
 #[case("test3")]
 #[case("test4")]
+#[case("test5")]
 fn test_compile(mut cli: Command, #[case] dir: &str) {
     // given
     let dir = "tests/data/".to_string() + dir;
@@ -90,8 +91,8 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
 
-    //println!("{}", stdout);
-    //println!("{}", stderr);
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
 
     assert!(stderr.is_empty());
     assert_eq!(stdout, expected_output);

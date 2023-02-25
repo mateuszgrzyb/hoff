@@ -1,81 +1,53 @@
 use crate::library::ast::untyped;
-use crate::library::import_qualifier::typecheck_pre_qualified::TypeCheckResult;
+use crate::library::import_qualifier::typecheck_pre_qualified::sorter::{
+    Mark, MarkedNode, Sorter,
+};
 use std::collections::HashMap;
 
-#[derive(Clone)]
-enum Mark {
-    None,
-    Temp,
-    Perm,
-}
+fn type_sorter_get_inner_elems(
+    marks: HashMap<String, MarkedNode<untyped::Struct>>,
+    elem: &untyped::Struct,
+) -> Vec<(String, untyped::Struct, Mark)> {
+    let mut inner_elems = Vec::new();
 
-pub struct TypeSorter {
-    marks: HashMap<String, (untyped::Struct, Mark)>,
-    sorted: Vec<untyped::Struct>,
-}
-
-impl TypeSorter {
-    pub fn create(ss: Vec<untyped::Struct>) -> Self {
-        let marks = ss
-            .into_iter()
-            .map(|s| (s.name.clone(), (s, Mark::None)))
-            .collect();
-        Self {
-            marks,
-            sorted: Vec::new(),
-        }
-    }
-
-    #[allow(unreachable_code)]
-    pub fn sort(&mut self) -> TypeCheckResult<Vec<untyped::Struct>> {
-        loop {
-            let marks = self.marks.clone();
-            let Some((n, (s, m))) = marks.iter().find(|m| {
-                matches!(m.1.1, Mark::None)
-            }) else {
-                break;
-            };
-
-            self.visit(n, s, m)?
-        }
-
-        Ok(self.sorted.clone())
-    }
-
-    fn visit(
-        &mut self,
-        n: &String,
-        s: &untyped::Struct,
-        m: &Mark,
-    ) -> TypeCheckResult<()> {
-        match m {
-            Mark::Perm => return Ok(()),
-            Mark::Temp => return Err(String::from("test").into()),
-            Mark::None => {
-                self.marks.insert((*n).clone(), ((*s).clone(), Mark::Temp));
-
-                let marks = self.marks.clone();
-
-                for (_, t) in s.clone().args {
-                    let untyped::Type::Simple(tn) = t else {
-                        continue
-                    };
-
-                    let Some((s, m)) = marks.get(tn.as_str()) else {
-                        continue
-                    };
-
-                    self.visit(&tn, s, m)?
-                }
-
-                self.marks.insert((*n).clone(), ((*s).clone(), Mark::Perm));
-
-                self.sorted.push((*s).clone())
-            }
+    for (_, t) in elem.args.clone() {
+        let untyped::Type::Simple(tn) = t else {
+            continue
         };
 
-        Ok(())
+        let Some(MarkedNode{ elem, mark }) = marks.get(tn.as_str()) else {
+            continue
+        };
+
+        inner_elems.push((tn, elem.clone(), mark.clone()))
     }
+
+    inner_elems
+}
+
+pub fn get_type_sorter(ss: Vec<untyped::Struct>) -> Sorter<untyped::Struct> {
+    Sorter::create(ss, type_sorter_get_inner_elems)
+}
+
+fn name_sorter_get_inner_elems(
+    marks: HashMap<String, MarkedNode<untyped::ValDecl>>,
+    elem: &untyped::ValDecl,
+) -> Vec<(String, untyped::ValDecl, Mark)> {
+    let mut inner_elems = Vec::new();
+
+    for inner_val in elem.inner_vals.clone() {
+        let Some(MarkedNode { elem, mark}) = marks.get(inner_val.as_str()) else {
+            continue
+        };
+
+        inner_elems.push((inner_val, elem.clone(), mark.clone()))
+    }
+
+    inner_elems
+}
+
+pub fn get_name_sorter(vs: Vec<untyped::ValDecl>) -> Sorter<untyped::ValDecl> {
+    Sorter::create(vs, name_sorter_get_inner_elems)
 }
 
 #[cfg(test)]
@@ -83,7 +55,6 @@ mod tests {
     use crate::library::ast::Type;
     use crate::library::import_qualifier::typecheck_pre_qualified::*;
     use rstest::*;
-    use std::ops::Index;
 
     #[rstest]
     fn test_sort() {
@@ -112,7 +83,7 @@ mod tests {
             ]),
         };
         let structs = Vec::from([t1.clone(), t2.clone(), t3.clone()]);
-        let mut gs = TypeSorter::create(structs);
+        let mut gs = get_type_sorter(structs);
 
         // when
         let sorted = gs.sort().unwrap();

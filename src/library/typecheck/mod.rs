@@ -3,7 +3,7 @@ mod namespace;
 
 use crate::library::ast::{
     qualified, typed, Decl, Expr, Fun, FunDecl, Imports, Lit, Mod, Op,
-    SimpleType, Struct, Type,
+    SimpleType, Struct, Type, Val,
 };
 use closure_manager::ClosureManager;
 use namespace::Namespace;
@@ -84,26 +84,37 @@ impl TypeChecker {
         &self,
         name: String,
     ) -> Result<(Vec<typed::Type>, typed::Type), String> {
-        match self.functions.get(name.as_str()) {
-            Some(ts) => Ok((*ts).clone()),
-            None => {
-                match self
-                    .module
-                    .imports
-                    .fundecls
-                    .iter()
-                    .find(|fd| fd.name == name)
-                {
-                    Some(f) => {
-                        let argts =
-                            f.args.clone().into_iter().map(|a| a.1).collect();
-                        let rt = f.rt.clone();
-                        Ok((argts, rt))
-                    }
-                    None => Err(format!("Cant find function {}", name)),
-                }
-            }
+        if let Some(f) = self.functions.get(name.as_str()) {
+            return Ok(f.clone());
         }
+
+        if let Some(f) = self
+            .module
+            .imports
+            .fundecls
+            .iter()
+            .find(|vd| vd.name == name)
+        {
+            let argts = f.args.clone().into_iter().map(|a| a.1).collect();
+            let rt = f.rt.clone();
+            return Ok((argts, rt));
+        }
+
+        Err(format!("Cant find function {}", name))
+    }
+
+    fn get_value(&self, name: String) -> Result<typed::Type, String> {
+        if let Some(ts) = self.values.get(name.as_str()) {
+            return Ok(ts.clone());
+        }
+
+        if let Some(ts) =
+            self.module.imports.vals.iter().find(|vd| vd.name == name)
+        {
+            return Ok(ts.t.clone());
+        }
+
+        Err(format!("Cant find value {}", name))
     }
 
     fn get_type(&self, s: qualified::Type) -> Result<typed::Type, String> {
@@ -132,13 +143,7 @@ impl TypeChecker {
         self.module = m;
 
         let name = self.module.name.clone();
-        let decls = self
-            .module
-            .decls
-            .clone()
-            .into_iter()
-            .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
-            .collect::<Result<_, String>>()?;
+        let decls = self.typecheck_decls(self.module.decls.clone())?;
         let imports = self.module.imports.clone();
 
         Ok(Mod {
@@ -146,6 +151,15 @@ impl TypeChecker {
             decls,
             imports,
         })
+    }
+
+    pub fn typecheck_decls(
+        &mut self,
+        ds: Vec<qualified::Decl>,
+    ) -> Result<Vec<typed::Decl>, String> {
+        ds.into_iter()
+            .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
+            .collect::<Result<_, _>>()
     }
 
     fn typecheck_decl(
@@ -160,6 +174,10 @@ impl TypeChecker {
             Decl::Struct(s) => self.typecheck_struct(s).map(|s| TypedValue {
                 v: Decl::Struct(s.v),
                 t: s.t,
+            }),
+            Decl::Val(v) => self.typecheck_val(v).map(|v| TypedValue {
+                v: Decl::Val(v.v),
+                t: v.t,
             }),
             Decl::Import(i) => self.typecheck_import(i).map(|i| TypedValue {
                 v: Decl::Import(i.v),
@@ -231,6 +249,33 @@ impl TypeChecker {
         )
     }
 
+    fn typecheck_val(
+        &mut self,
+        value: qualified::Val,
+    ) -> CheckResult<typed::Val> {
+        let name = value.name;
+        let t = self.get_type(value.t)?;
+        let expr = self.typecheck_expr(value.expr)?;
+
+        if t != expr.t {
+            return Err(format!(
+                "Declared type and value type does not match: {:?} != {:?}",
+                t, expr.t,
+            ));
+        }
+
+        self.values.insert(name.clone(), expr.t.clone());
+
+        Ok(TypedValue {
+            v: Val {
+                name,
+                t,
+                expr: expr.v,
+            },
+            t: expr.t,
+        })
+    }
+
     fn typecheck_import(
         &mut self,
         import_: qualified::Import,
@@ -243,6 +288,7 @@ impl TypeChecker {
                 Type::Function(ft)
             }
             typed::Import::Struct(s) => Type::Simple(SimpleType::Struct(s)),
+            typed::Import::Val(v) => v.t,
         };
         TypedValue::get(import_, type_)
     }
@@ -351,13 +397,9 @@ impl TypeChecker {
     }
 
     fn typecheck_value(&mut self, name: String) -> CheckResult<typed::Expr> {
-        let type_ = self.values.get(name.as_str());
+        let type_ = self.get_value(name.clone())?;
 
-        let Some(type_) = type_ else {
-            return Err(format!("Value with name {name} does not exist"))
-        };
-
-        TypedValue::get(Expr::Value(name), (*type_).clone())
+        TypedValue::get(Expr::Value(name), type_.clone())
     }
 
     fn typecheck_assign(
@@ -452,44 +494,40 @@ impl TypeChecker {
 
             exp_rt.push(rt.clone());
 
-            return TypedValue::get(
-                Expr::Function(
-                    Box::new(Fun {
-                        name: format!("partial-{}", name),
-                        args: exp_rt
+            let partial_name = format!("partial-{}", name);
+            let args = exp_rt
+                .clone()
+                .into_iter()
+                .enumerate()
+                .map(|p| (p.0.to_string(), p.1))
+                .collect();
+            let body = Expr::Call(
+                name,
+                argvs
+                    .into_iter()
+                    .chain(
+                        exp_rt
                             .clone()
                             .into_iter()
                             .enumerate()
-                            .map(|p| (p.0.to_string(), p.1))
-                            .collect(),
+                            .map(|(i, _)| Expr::Value(i.to_string()))
+                            .collect::<Vec<_>>(),
+                    )
+                    .collect(),
+            );
+
+            return TypedValue::get(
+                Expr::Function(
+                    Box::new(Fun {
+                        name: partial_name,
+                        args,
                         rt,
-                        body: Expr::Call(
-                            name,
-                            argvs
-                                .into_iter()
-                                .chain(
-                                    exp_rt
-                                        .clone()
-                                        .into_iter()
-                                        .enumerate()
-                                        .map(|(i, _)| {
-                                            Expr::Value(i.to_string())
-                                        })
-                                        .collect::<Vec<_>>(),
-                                )
-                                .collect(),
-                        ),
+                        body,
                     }),
                     self.closure.clone(),
                 ),
                 Type::Function(exp_rt),
             );
-            /*
-            return TypedValue::get(
-                Expr::Call(name.clone(), argvs),
-                Type::Function(exp_rt),
-            );
-             */
         }
     }
 

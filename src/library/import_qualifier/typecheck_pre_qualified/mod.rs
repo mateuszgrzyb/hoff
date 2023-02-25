@@ -1,9 +1,12 @@
+mod sorter;
 mod type_sorter;
 
 use crate::library::ast::{typed, untyped, SimpleType};
+use crate::library::import_qualifier::typecheck_pre_qualified::type_sorter::{
+    get_name_sorter, get_type_sorter,
+};
 use std::collections::HashMap;
 use std::error::Error;
-use type_sorter::TypeSorter;
 
 type TypeCheckResult<V> = Result<V, Box<dyn Error>>;
 
@@ -22,14 +25,21 @@ impl TypeCheckPreQualified {
         &mut self,
         fundecls: Vec<untyped::FunDecl>,
         structs: Vec<untyped::Struct>,
-    ) -> TypeCheckResult<(Vec<typed::FunDecl>, Vec<typed::Struct>)> {
+        valdecls: Vec<untyped::ValDecl>,
+    ) -> TypeCheckResult<(
+        Vec<typed::FunDecl>,
+        Vec<typed::Struct>,
+        Vec<typed::ValDecl>,
+    )> {
         self.populate_types();
 
         let typed_structs = self.check_structs(structs)?;
 
         let typed_fundecls = self.check_fundecls(fundecls)?;
 
-        Ok((typed_fundecls, typed_structs))
+        let typed_valdecls = self.check_valdecls(valdecls)?;
+
+        Ok((typed_fundecls, typed_structs, typed_valdecls))
     }
 
     fn populate_types(&mut self) {
@@ -43,7 +53,7 @@ impl TypeCheckPreQualified {
         &mut self,
         ss: Vec<untyped::Struct>,
     ) -> TypeCheckResult<Vec<typed::Struct>> {
-        let mut type_sorter = TypeSorter::create(ss);
+        let mut type_sorter = get_type_sorter(ss);
         let ss = type_sorter.sort()?;
 
         let result = ss
@@ -93,6 +103,31 @@ impl TypeCheckPreQualified {
         let rt = self.get_type(fd.rt)?;
 
         Ok(typed::FunDecl { name, args, rt })
+    }
+
+    fn check_valdecls(
+        &self,
+        vds: Vec<untyped::ValDecl>,
+    ) -> TypeCheckResult<Vec<typed::ValDecl>> {
+        let mut name_sorter = get_name_sorter(vds);
+        let vds = name_sorter.sort()?;
+
+        vds.into_iter().map(|fd| self.check_valdecl(fd)).collect()
+    }
+
+    fn check_valdecl(
+        &self,
+        vd: untyped::ValDecl,
+    ) -> TypeCheckResult<typed::ValDecl> {
+        let name = vd.name;
+        let t = self.get_type(vd.t)?;
+        let inner_vals = vd.inner_vals;
+
+        Ok(typed::ValDecl {
+            name,
+            t,
+            inner_vals,
+        })
     }
 
     fn get_type(&self, t: untyped::Type) -> TypeCheckResult<typed::Type> {

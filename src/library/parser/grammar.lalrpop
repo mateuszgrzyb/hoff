@@ -153,6 +153,10 @@ Struct: Struct = {
         => Struct { name, args },
 };
 
+Val: Val = {
+    "val" <tid:TypedId> "=" <expr:Expr> => Val { name: tid.0, t: tid.1, expr },
+};
+
 Import: Import = {
     "from" <qualifier:DoubleColon<Id>> "import" <name:Id>
         => (qualifier, name),
@@ -160,7 +164,8 @@ Import: Import = {
         => (qualifier, name),
 };
 
-Decl: Decl = {
+pub Decl: Decl = {
+    <Val> => Decl::Val(<>),
     <Fun> => Decl::Fun(<>),
     <Struct> => Decl::Struct(<>),
     <Import> => Decl::Import(<>),

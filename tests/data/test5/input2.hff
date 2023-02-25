@@ -1,0 +1,4 @@
+
+from input import i
+
+val j: Int = i + 1

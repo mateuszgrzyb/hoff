@@ -1,6 +1,6 @@
-use crate::library::ast::NamedModule;
 use crate::library::cli::{Args, DumpTarget};
 use crate::library::codegen::CodeGen;
+use crate::library::import_qualifier::Nameable;
 use inkwell::context::Context;
 use std::error::Error;
 use std::fmt::Debug;
@@ -8,7 +8,7 @@ use std::fs::write;
 
 pub fn dump<I, T>(args: &Args, ms: I) -> Result<(), Box<dyn Error>>
 where
-    T: Debug + NamedModule,
+    T: Debug + Nameable,
     I: Iterator<Item = T>,
 {
     for m in ms {
