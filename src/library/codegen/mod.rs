@@ -111,7 +111,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Type::Simple(SimpleType::Struct(s)) => self
                 .structs
-                .get(&*s.name)
+                .get(s.name.as_str())
                 .unwrap()
                 .1
                 .ptr_type(AddressSpace::default())
@@ -447,7 +447,11 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_call(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
         let f = *self.functions.get(name.as_str()).unwrap();
-        let closure = self.closures.get(&*name).unwrap_or(&Vec::new()).clone();
+        let closure = self
+            .closures
+            .get(name.as_str())
+            .unwrap_or(&Vec::new())
+            .clone();
 
         let standard_args = args
             .into_iter()
@@ -456,7 +460,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let closure = closure
             .into_iter()
-            .map(|n| (*self.values.get(&*n).unwrap()).into())
+            .map(|n| (*self.values.get(n.as_str()).unwrap()).into())
             .collect::<Vec<_>>();
 
         let args = standard_args
@@ -582,7 +586,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_new(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
         let structs = self.structs.clone();
-        let (_, struct_type) = structs.get(&*name).unwrap();
+        let (_, struct_type) = structs.get(name.as_str()).unwrap();
 
         let struct_args = args
             .into_iter()
@@ -601,16 +605,25 @@ impl<'ctx> CodeGen<'ctx> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::library::codegen::*;
+    use indoc::indoc;
     use rstest::*;
 
-    #[rstest]
-    fn test_1() {
-        // given
-        let context = Context::create();
-        let mut codegen = CodeGen::create(&context, false);
+    #[fixture]
+    fn context() -> &'static Context {
+        Box::leak(Box::new(Context::create()))
+    }
 
+    #[fixture]
+    fn codegen(context: &'static Context) -> CodeGen<'static> {
+        let codegen = CodeGen::create(&context, false);
+        codegen
+    }
+
+    #[rstest]
+    fn test_1(mut codegen: CodeGen) {
+        // given
         let m = Mod {
             name: "test_1".to_string(),
             decls: Vec::from([
@@ -650,22 +663,22 @@ mod tests {
             ]),
             imports: Imports::create(),
         };
-        let expected_module_str = r#"; ModuleID = 'test_1'
-source_filename = "test_1.ir"
+        let expected_module_str = indoc! {r#"
+            ; ModuleID = 'test_1'
+            source_filename = "test_1.ir"
 
-%Foo = type <{ i32, i1, i8* }>
+            %Foo = type <{ i32, i1, i8* }>
 
-define i32 @f1(%Foo* %a) {
-entry:
-  ret i32 32
-}
-"#;
+            define i32 @f1(%Foo* %a) {
+            entry:
+              ret i32 32
+            }
+        "#};
 
         // when
         codegen.compile_module(m);
 
         // then
-        // TODO: fix
-        // assert_eq!(codegen.module.to_string(), expected_module_str)
+        assert_eq!(codegen.module.to_string(), expected_module_str);
     }
 }

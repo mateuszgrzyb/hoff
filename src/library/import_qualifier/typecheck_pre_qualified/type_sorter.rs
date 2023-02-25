@@ -51,7 +51,7 @@ pub fn get_name_sorter(vs: Vec<untyped::ValDecl>) -> Sorter<untyped::ValDecl> {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use crate::library::ast::Type;
     use crate::library::import_qualifier::typecheck_pre_qualified::*;
     use rstest::*;

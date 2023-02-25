@@ -17,4 +17,5 @@ regex = "1.7.0"
 
 
 [dev-dependencies]
+indoc = "2.0.0"
 rstest = "0.16.0"

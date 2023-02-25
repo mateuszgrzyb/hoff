@@ -52,11 +52,9 @@ impl<T: Nameable + Clone> Sorter<T> {
     pub fn sort(&mut self) -> Result<Vec<T>, Box<dyn Error>> {
         loop {
             let marks = self.marks.clone();
-            let Some((name, MarkedNode { elem, mark })) = marks.iter().find(|m| {
-                matches!(m.1.mark, Mark::None)
-            }) else {
-                break;
-            };
+            let Some((name, MarkedNode { elem, mark })) = marks.iter()
+                .find(|(_, MarkedNode { mark, .. })| { matches!(mark, Mark::None) })
+            else { break };
 
             self.visit(name, elem, mark)?
         }

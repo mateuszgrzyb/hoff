@@ -5,7 +5,7 @@ use crate::library::cli::Args;
 use crate::library::parser::grammar::{DeclParser, ExprParser};
 use inkwell::context::Context;
 use std::error::Error;
-use std::io::stdin;
+use std::io::{stdin, stdout, Write};
 
 fn parse_repl_line(
     expr_parser: &ExprParser,
@@ -23,6 +23,13 @@ fn parse_repl_line(
     return Err("Parse error".into());
 }
 
+fn print_and_flush(text: &str) {
+    print!("{}", text);
+    stdout()
+        .flush()
+        .unwrap_or_else(|err| panic!("flush error: {}", err));
+}
+
 pub fn repl(args: Args) -> ! {
     let context = Context::create();
 
@@ -34,19 +41,20 @@ pub fn repl(args: Args) -> ! {
     let decl_parser = DeclParser::new();
 
     'repl: loop {
-        print!(">>>");
+        print_and_flush(">>>");
         let mut input = String::new();
         while !input.contains(";;") {
-            let Ok(_) = stdin()
-                .read_line(&mut input)
-                .map_err(|err| println!("Invalid input: {}", err))
-            else { continue 'repl };
+            if let Err(err) = stdin().read_line(&mut input) {
+                println!("Invalid input: {}", err);
+                continue 'repl;
+            }
+            print_and_flush("...");
         }
 
-        let input = input.split(";;").next().unwrap_or("").to_string();
+        let input = input.split(";;").next().unwrap().to_string();
 
         let Ok(expr) = parse_repl_line(&expr_parser, &decl_parser, input)
-                .map_err(|err| println!("Parse error: {}", err))
+            .map_err(|err| println!("Parse error: {}", err))
         else { continue };
 
         let mut repl = REPL::create(&fds, &ss, &vs, &context, args.o);

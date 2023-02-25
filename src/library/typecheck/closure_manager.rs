@@ -45,7 +45,7 @@ impl ClosureManager {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use rstest::*;
 

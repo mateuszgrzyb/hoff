@@ -21,7 +21,10 @@ impl Namespace {
     }
 
     pub fn get_qualified_name(&self, name: String) -> String {
-        (*self.qualified_names.get(&*name).unwrap_or(&name)).clone()
+        self.qualified_names
+            .get(name.as_str())
+            .unwrap_or(&name)
+            .clone()
     }
 
     pub fn drop_qualified_name(&mut self) {

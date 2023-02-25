@@ -136,7 +136,7 @@ impl TypeCheckPreQualified {
                 let Some(t) = self.types.get(s.as_str()) else {
                     return Err(format!("Unknown type: {s}").into())
                 };
-                Ok(typed::Type::Simple((*t).clone()))
+                Ok(typed::Type::Simple(t.clone()))
             }
             untyped::Type::Function(ts) => {
                 let ts = ts

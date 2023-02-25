@@ -63,7 +63,7 @@ impl TypeChecker {
         match self.types.get(name.as_str()) {
             Some(args) => Ok(Struct {
                 name: name.to_string(),
-                args: (*args).clone(),
+                args: args.clone(),
             }),
             None => {
                 match self
@@ -73,7 +73,7 @@ impl TypeChecker {
                     .iter()
                     .find(|s| s.name == name)
                 {
-                    Some(s) => Ok((*s).clone()),
+                    Some(s) => Ok(s.clone()),
                     None => Err(format!("Cant find struct {}", name)),
                 }
             }
@@ -192,7 +192,7 @@ impl TypeChecker {
         let rt = self.get_type(f.rt)?;
 
         args.v.iter().for_each(|(n, t)| {
-            self.values.insert((*n).clone(), (*t).clone());
+            self.values.insert(n.clone(), t.clone());
         });
 
         self.functions.insert(
@@ -559,7 +559,7 @@ impl TypeChecker {
         name: String,
         attr: String,
     ) -> CheckResult<typed::Expr> {
-        let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(&*name) else {
+        let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
             return Err(format!(
                 "Struct `{name}` does not exist.",
             ));
@@ -595,22 +595,15 @@ impl TypeChecker {
         )
     }
 }
-/*
+
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use rstest::*;
 
-    fn typechecker(module: qualified::Mod) -> TypeChecker {
-        TypeChecker {
-            values: Default::default(),
-            functions: Default::default(),
-            types: Default::default(),
-            closure: Default::default(),
-            closure_manager: ClosureManager::new(),
-            namespace: Namespace::new(),
-            module
-        }
+    #[fixture]
+    fn typechecker() -> TypeChecker {
+        TypeChecker::create()
     }
 
     // typecheck_lit
@@ -938,6 +931,3 @@ mod tests {
         assert!(result.err().is_some())
     }
 }
-
-
- */
