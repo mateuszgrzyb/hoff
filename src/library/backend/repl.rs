@@ -5,6 +5,7 @@ use crate::library::import_qualifier::ImportQualifier;
 use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
+use std::error::Error;
 
 pub struct REPL<'init, 'ctx> {
     typechecker: TypeChecker,
@@ -40,14 +41,20 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
         }
     }
 
-    pub fn eval(&mut self, repl: untyped::Repl) -> Result<String, String> {
+    pub fn eval(
+        &mut self,
+        repl: untyped::Repl,
+    ) -> Result<String, Box<dyn Error>> {
         match repl {
             untyped::Repl::Expr(expr) => self.eval_expr(expr),
             untyped::Repl::Decl(decl) => self.eval_decl(decl),
         }
     }
 
-    fn eval_expr(&mut self, expr: untyped::Expr) -> Result<String, String> {
+    fn eval_expr(
+        &mut self,
+        expr: untyped::Expr,
+    ) -> Result<String, Box<dyn Error>> {
         let (body, rt) = self.typechecker.get_type_of_expr(expr.clone())?;
 
         let main_mod = self.create_main(body, rt.clone())?;
@@ -56,7 +63,7 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
 
         let return_value_repr = unsafe {
             let Ok(main) = self.execution_engine.get_function_value("main") else {
-                return Err("some error happened".to_string())
+                return Err("some error happened".into())
             };
 
             let return_value = self.execution_engine.run_function(main, &[]);
@@ -79,7 +86,10 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
         Ok(return_value_repr)
     }
 
-    fn eval_decl(&mut self, decl: untyped::Decl) -> Result<String, String> {
+    fn eval_decl(
+        &mut self,
+        decl: untyped::Decl,
+    ) -> Result<String, Box<dyn Error>> {
         self.decls.push(decl);
         Ok("".to_string())
     }
@@ -88,7 +98,7 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
         &mut self,
         body: typed::Expr,
         rt: typed::Type,
-    ) -> Result<typed::Mod, String> {
+    ) -> Result<typed::Mod, Box<dyn Error>> {
         let main = typed::Fun {
             name: "main".to_string(),
             args: Vec::new(),

@@ -16,7 +16,7 @@ pub struct MarkedNode<T> {
 }
 
 type GetInnerElemsCallback<T> =
-    fn(HashMap<String, MarkedNode<T>>, &T) -> Vec<(String, T, Mark)>;
+    fn(HashMap<String, MarkedNode<T>>, &T) -> Vec<(T, Mark)>;
 
 pub struct Sorter<T: Nameable + Clone> {
     marks: HashMap<String, MarkedNode<T>>,
@@ -52,31 +52,25 @@ impl<T: Nameable + Clone> Sorter<T> {
     pub fn sort(&mut self) -> Result<Vec<T>, Box<dyn Error>> {
         loop {
             let marks = self.marks.clone();
-            let Some((name, MarkedNode { elem, mark })) = marks.iter()
-                .find(|(_, MarkedNode { mark, .. })| { matches!(mark, Mark::None) })
+            let Some(MarkedNode { elem, mark }) = marks.values()
+                .find(|MarkedNode { mark, .. }| { matches!(mark, Mark::None) })
             else { break };
 
-            self.visit(name, elem, mark)?
+            self.visit(elem, mark)?
         }
 
         Ok(self.sorted.clone())
     }
 
-    fn visit(
-        &mut self,
-        name: &String,
-        elem: &T,
-        mark: &Mark,
-    ) -> Result<(), Box<dyn Error>> {
+    fn visit(&mut self, elem: &T, mark: &Mark) -> Result<(), Box<dyn Error>> {
         match mark {
             Mark::Perm => return Ok(()),
             Mark::Temp => return Err("cyclic reference found".into()),
             Mark::None => {
-                let name = name.clone();
                 let elem = elem.clone();
 
                 self.marks.insert(
-                    name.clone(),
+                    elem.get_name(),
                     MarkedNode {
                         elem: elem.clone(),
                         mark: Mark::Temp,
@@ -85,13 +79,12 @@ impl<T: Nameable + Clone> Sorter<T> {
 
                 let marks = self.marks.clone();
 
-                for (name, elem, mark) in (self.get_inner_elems)(marks, &elem)
-                {
-                    self.visit(&name, &elem, &mark)?
+                for (elem, mark) in (self.get_inner_elems)(marks, &elem) {
+                    self.visit(&elem, &mark)?
                 }
 
                 self.marks.insert(
-                    name,
+                    elem.get_name(),
                     MarkedNode {
                         elem: elem.clone(),
                         mark: Mark::Perm,

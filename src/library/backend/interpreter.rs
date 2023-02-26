@@ -2,6 +2,7 @@ use super::Backend;
 use crate::library::backend::get_opt_level;
 use inkwell::execution_engine::ExecutionEngine;
 use inkwell::module::Module;
+use std::error::Error;
 
 pub struct Interpreter<'ctx> {
     execution_engine: ExecutionEngine<'ctx>,
@@ -22,12 +23,12 @@ impl<'ctx> Interpreter<'ctx> {
 }
 
 impl<'ctx> Backend for Interpreter<'ctx> {
-    fn run(&self) -> Result<(), String> {
+    fn run(&self) -> Result<(), Box<dyn Error>> {
         unsafe {
             let main = self.execution_engine.get_function::<MainFunc>("main");
 
             let Ok(main) = main else {
-                return Err("Main function was not declared".to_string())
+                return Err("Main function was not declared".into())
             };
 
             main.call();

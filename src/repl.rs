@@ -1,5 +1,4 @@
 use crate::library::ast::untyped::Repl;
-use crate::library::ast::ValDecl;
 use crate::library::backend::REPL;
 use crate::library::cli::Args;
 use crate::library::parser::grammar::{DeclParser, ExprParser};

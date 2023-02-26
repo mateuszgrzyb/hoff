@@ -6,10 +6,11 @@ pub use compiler::Compiler;
 use inkwell::OptimizationLevel;
 pub use interpreter::Interpreter;
 pub use repl::REPL;
+use std::error::Error;
 use std::mem::transmute;
 
 pub trait Backend {
-    fn run(&self) -> Result<(), String>;
+    fn run(&self) -> Result<(), Box<dyn Error>>;
 }
 
 fn get_opt_level(opt_level: u32) -> OptimizationLevel {

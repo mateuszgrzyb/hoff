@@ -1,7 +1,8 @@
 use crate::library::ast::typed::{FunDecl, Struct, ValDecl};
 use crate::library::ast::{qualified, untyped, Decl, Mod};
+use std::error::Error;
 
-type QualifyResult<V> = Result<V, String>;
+type QualifyResult<V> = Result<V, Box<dyn Error>>;
 
 pub struct ImportQualifier<'init> {
     global_fundecls: &'init Vec<FunDecl>,
@@ -54,7 +55,7 @@ impl<'init> ImportQualifier<'init> {
         decls
             .into_iter()
             .map(|d| self.qualify_decl(d))
-            .collect::<Result<Vec<_>, String>>()
+            .collect::<Result<Vec<_>, _>>()
     }
 
     fn qualify_decl(
@@ -126,6 +127,6 @@ impl<'init> ImportQualifier<'init> {
             return Ok(qualified::Import::Val(v));
         }
 
-        Err(format!("{} cannot be imported", name))
+        Err(format!("{} cannot be imported", name).into())
     }
 }

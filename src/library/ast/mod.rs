@@ -182,7 +182,6 @@ pub mod qualified {
     pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<String, (), (), Import>;
     pub type Mod = super::Mod<String, (), (), Import, Imports>;
-    pub type Repl = super::Repl<String, (), (), Import>;
     pub type Type = super::Type<String>;
 
     impl Nameable for Mod {
@@ -221,7 +220,6 @@ pub mod typed {
     pub type Import = super::QualifiedImport<SimpleType>;
     pub type Decl = super::Decl<SimpleType, Closure, Struct, Import>;
     pub type Mod = super::Mod<SimpleType, Closure, Struct, Import, Imports>;
-    pub type Repl = super::Repl<SimpleType, Closure, Struct, Import>;
     pub type Type = super::Type<SimpleType>;
 
     impl Nameable for Mod {

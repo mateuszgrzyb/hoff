@@ -2,13 +2,18 @@ use crate::library::ast::untyped::{Expr, Op};
 
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(pub grammar, "/library/parser/grammar.rs");
+lalrpop_mod!(
+    #[allow(dead_code)]
+    pub grammar,
+    "/library/parser/grammar.rs"
+);
 
 pub fn get_binop(op: Op) -> impl FnMut(Expr, Expr) -> Expr {
     move |lh, rh| Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
 }
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod test {
     use super::grammar::{ExprParser, FunParser, ModParser};
     use crate::library::ast::untyped::*;
@@ -203,7 +208,6 @@ mod test {
         fun i (a: Int, b: Int, c: Int): Int { a }
 
         "#;
-        let name = "main.hff".to_string();
         let exp_ast = Mod {
             name: "main.hff".to_string(),
             decls: Vec::from([

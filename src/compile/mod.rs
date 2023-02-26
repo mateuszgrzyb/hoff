@@ -108,7 +108,7 @@ impl Compile {
     fn qualify_modules<MS>(
         &self,
         ms: MS,
-    ) -> Result<Vec<qualified::Mod>, String>
+    ) -> Result<Vec<qualified::Mod>, Box<dyn Error>>
     where
         MS: Iterator<Item = untyped::Mod>,
     {
@@ -118,8 +118,7 @@ impl Compile {
         let ms = ms.collect::<Vec<_>>();
 
         let (fds, ss, vs) = ipq.pre_qualify(&ms);
-        let (fds, ss, vs) =
-            tcpq.run(fds, ss, vs).map_err(|err| err.to_string())?;
+        let (fds, ss, vs) = tcpq.run(fds, ss, vs)?;
 
         let mut qualifier = ImportQualifier::create(&fds, &ss, &vs);
 
@@ -132,7 +131,7 @@ impl Compile {
     fn typecheck_modules<QMS>(
         &self,
         qms: QMS,
-    ) -> Result<Vec<typed::Mod>, String>
+    ) -> Result<Vec<typed::Mod>, Box<dyn Error>>
     where
         QMS: Iterator<Item = qualified::Mod>,
     {
@@ -171,13 +170,13 @@ impl Compile {
     fn link_modules<'ctx>(
         &self,
         cgs: Vec<CodeGen<'ctx>>,
-    ) -> Result<Module<'ctx>, String> {
+    ) -> Result<Module<'ctx>, Box<dyn Error>> {
         cgs.into_iter()
             .map(|codegen| codegen.module)
             .reduce(|m1, m2| {
                 m1.link_in_module(m2).unwrap();
                 m1
             })
-            .ok_or_else(|| format!("No files were compiled"))
+            .ok_or_else(|| "No files were compiled".into())
     }
 }

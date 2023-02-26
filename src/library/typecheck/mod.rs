@@ -2,12 +2,13 @@ mod closure_manager;
 mod namespace;
 
 use crate::library::ast::{
-    qualified, typed, Decl, Expr, Fun, FunDecl, Imports, Lit, Mod, Op,
-    SimpleType, Struct, Type, Val,
+    qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
+    Val,
 };
 use closure_manager::ClosureManager;
 use namespace::Namespace;
 use std::collections::HashMap;
+use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TypedValue<V, T> {
@@ -21,7 +22,8 @@ impl<V, T> TypedValue<V, T> {
     }
 }
 
-type CheckResult<V, T = typed::Type> = Result<TypedValue<V, T>, String>;
+type CheckResult<V, T = typed::Type> =
+    Result<TypedValue<V, T>, Box<dyn Error>>;
 
 pub struct TypeChecker {
     values: HashMap<String, typed::Type>,
@@ -55,11 +57,14 @@ impl TypeChecker {
     pub fn get_type_of_expr(
         &mut self,
         expr: qualified::Expr,
-    ) -> Result<(typed::Expr, typed::Type), String> {
+    ) -> Result<(typed::Expr, typed::Type), Box<dyn Error>> {
         self.typecheck_expr(expr).map(|tv| (tv.v, tv.t))
     }
 
-    fn get_struct(&self, name: String) -> Result<typed::Struct, String> {
+    fn get_struct(
+        &self,
+        name: String,
+    ) -> Result<typed::Struct, Box<dyn Error>> {
         match self.types.get(name.as_str()) {
             Some(args) => Ok(Struct {
                 name: name.to_string(),
@@ -74,7 +79,7 @@ impl TypeChecker {
                     .find(|s| s.name == name)
                 {
                     Some(s) => Ok(s.clone()),
-                    None => Err(format!("Cant find struct {}", name)),
+                    None => Err(format!("Cant find struct {}", name).into()),
                 }
             }
         }
@@ -83,7 +88,7 @@ impl TypeChecker {
     fn get_function(
         &self,
         name: String,
-    ) -> Result<(Vec<typed::Type>, typed::Type), String> {
+    ) -> Result<(Vec<typed::Type>, typed::Type), Box<dyn Error>> {
         if let Some(f) = self.functions.get(name.as_str()) {
             return Ok(f.clone());
         }
@@ -100,10 +105,10 @@ impl TypeChecker {
             return Ok((argts, rt));
         }
 
-        Err(format!("Cant find function {}", name))
+        Err(format!("Cant find function {}", name).into())
     }
 
-    fn get_value(&self, name: String) -> Result<typed::Type, String> {
+    fn get_value(&self, name: String) -> Result<typed::Type, Box<dyn Error>> {
         if let Some(ts) = self.values.get(name.as_str()) {
             return Ok(ts.clone());
         }
@@ -114,10 +119,13 @@ impl TypeChecker {
             return Ok(ts.t.clone());
         }
 
-        Err(format!("Cant find value {}", name))
+        Err(format!("Cant find value {}", name).into())
     }
 
-    fn get_type(&self, s: qualified::Type) -> Result<typed::Type, String> {
+    fn get_type(
+        &self,
+        s: qualified::Type,
+    ) -> Result<typed::Type, Box<dyn Error>> {
         match s {
             Type::Function(ts) => {
                 let ts = ts
@@ -139,7 +147,10 @@ impl TypeChecker {
         }
     }
 
-    pub fn check(&mut self, m: qualified::Mod) -> Result<typed::Mod, String> {
+    pub fn check(
+        &mut self,
+        m: qualified::Mod,
+    ) -> Result<typed::Mod, Box<dyn Error>> {
         self.module = m;
 
         let name = self.module.name.clone();
@@ -156,7 +167,7 @@ impl TypeChecker {
     pub fn typecheck_decls(
         &mut self,
         ds: Vec<qualified::Decl>,
-    ) -> Result<Vec<typed::Decl>, String> {
+    ) -> Result<Vec<typed::Decl>, Box<dyn Error>> {
         ds.into_iter()
             .map(|d| self.typecheck_decl(d).map(|tv| tv.v))
             .collect::<Result<_, _>>()
@@ -211,7 +222,8 @@ impl TypeChecker {
             return Err(format!(
                 "Return type and body type does not match: {:?} != {:?}",
                 rt, body.t,
-            ));
+            )
+            .into());
         }
 
         let mut t = args.t;
@@ -237,7 +249,7 @@ impl TypeChecker {
             .args
             .into_iter()
             .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
-            .collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         self.types.insert(name.clone(), args.clone());
 
@@ -261,7 +273,8 @@ impl TypeChecker {
             return Err(format!(
                 "Declared type and value type does not match: {:?} != {:?}",
                 t, expr.t,
-            ));
+            )
+            .into());
         }
 
         self.values.insert(name.clone(), expr.t.clone());
@@ -300,7 +313,7 @@ impl TypeChecker {
         let v = args
             .into_iter()
             .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
-            .collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         self.closure_manager.append(v.clone());
 
@@ -348,14 +361,15 @@ impl TypeChecker {
             return Err(format!(
                 "Unequal binop types: {:?} != {:?}",
                 lh.t, rh.t
-            ));
+            )
+            .into());
         }
 
         let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
             return Err(format!(
                 "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
                 lh.t, rh.t
-            ));
+            ).into());
         };
 
         match (lht, op) {
@@ -380,7 +394,8 @@ impl TypeChecker {
             (lht, op) => Err(format!(
                 "Invalid operation type: {:?} {:?} {:?}",
                 lht, op, rh.t
-            )),
+            )
+            .into()),
         }
     }
 
@@ -415,7 +430,8 @@ impl TypeChecker {
             return Err(format!(
                 "Unequal assign types: {:?} != {:?}",
                 type_, expr.t
-            ));
+            )
+            .into());
         };
 
         self.values.insert(name.clone(), type_.clone());
@@ -458,7 +474,8 @@ impl TypeChecker {
                 "Invalid number of arguments: expected: {:?}, actual: {:?}",
                 exp_argts.len(),
                 argts.len()
-            ));
+            )
+            .into());
         } else if exp_argts.len() == argts.len() {
             // regular function
             for (exp_argt, argt) in
@@ -468,7 +485,8 @@ impl TypeChecker {
                     return Err(format!(
                         "Invalid argument type: {:?} != {:?}",
                         exp_argt, argt
-                    ));
+                    )
+                    .into());
                 }
             }
 
@@ -488,7 +506,8 @@ impl TypeChecker {
                     return Err(format!(
                         "Invalid argument type: {:?} != {:?}",
                         exp_argt, argt
-                    ));
+                    )
+                    .into());
                 }
             }
 
@@ -499,7 +518,7 @@ impl TypeChecker {
                 .clone()
                 .into_iter()
                 .enumerate()
-                .map(|p| (p.0.to_string(), p.1))
+                .map(|(i, t)| (i.to_string(), t))
                 .collect();
             let body = Expr::Call(
                 name,
@@ -545,7 +564,8 @@ impl TypeChecker {
             return Err(format!(
                 "Invalid if expression types: {:?} {:?} {:?}",
                 be.t, e1.t, e2.t
-            ));
+            )
+            .into());
         };
 
         TypedValue::get(
@@ -562,13 +582,13 @@ impl TypeChecker {
         let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
             return Err(format!(
                 "Struct `{name}` does not exist.",
-            ));
+            ).into());
         };
 
         let Some((_, type_)) = struct_.clone().args.into_iter().find(|(n, _)| n == &attr) else {
             return Err(format!(
                 "Struct `{name}` does not have attribute `{attr}`."
-            ));
+            ).into());
         };
 
         TypedValue::get(Expr::Attr(name, struct_.clone(), attr), type_.clone())
@@ -582,7 +602,7 @@ impl TypeChecker {
         let args = args
             .into_iter()
             .map(|e| self.typecheck_expr(e).map(|tv| tv.v))
-            .collect::<Result<Vec<typed::Expr>, String>>()?;
+            .collect::<Result<Vec<typed::Expr>, _>>()?;
 
         let struct_args = self.get_struct(name.clone()).map(|s| s.args)?;
 

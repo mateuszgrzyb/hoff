@@ -4,50 +4,50 @@ use crate::library::import_qualifier::typecheck_pre_qualified::sorter::{
 };
 use std::collections::HashMap;
 
-fn type_sorter_get_inner_elems(
+fn get_inner_structs(
     marks: HashMap<String, MarkedNode<untyped::Struct>>,
     elem: &untyped::Struct,
-) -> Vec<(String, untyped::Struct, Mark)> {
-    let mut inner_elems = Vec::new();
+) -> Vec<(untyped::Struct, Mark)> {
+    let mut inner_structs = Vec::new();
 
-    for (_, t) in elem.args.clone() {
-        let untyped::Type::Simple(tn) = t else {
+    for (_, arg_type) in elem.args.clone() {
+        let untyped::Type::Simple(struct_name) = arg_type else {
             continue
         };
 
-        let Some(MarkedNode{ elem, mark }) = marks.get(tn.as_str()) else {
+        let Some(MarkedNode{ elem, mark }) = marks.get(struct_name.as_str()) else {
             continue
         };
 
-        inner_elems.push((tn, elem.clone(), mark.clone()))
+        inner_structs.push((elem.clone(), mark.clone()))
     }
 
-    inner_elems
+    inner_structs
 }
 
 pub fn get_type_sorter(ss: Vec<untyped::Struct>) -> Sorter<untyped::Struct> {
-    Sorter::create(ss, type_sorter_get_inner_elems)
+    Sorter::create(ss, get_inner_structs)
 }
 
-fn name_sorter_get_inner_elems(
+fn get_inner_vals(
     marks: HashMap<String, MarkedNode<untyped::ValDecl>>,
-    elem: &untyped::ValDecl,
-) -> Vec<(String, untyped::ValDecl, Mark)> {
-    let mut inner_elems = Vec::new();
+    val_decl: &untyped::ValDecl,
+) -> Vec<(untyped::ValDecl, Mark)> {
+    let mut inner_vals = Vec::new();
 
-    for inner_val in elem.inner_vals.clone() {
-        let Some(MarkedNode { elem, mark}) = marks.get(inner_val.as_str()) else {
+    for val_name in val_decl.inner_vals.clone() {
+        let Some(MarkedNode { elem, mark}) = marks.get(val_name.as_str()) else {
             continue
         };
 
-        inner_elems.push((inner_val, elem.clone(), mark.clone()))
+        inner_vals.push((elem.clone(), mark.clone()))
     }
 
-    inner_elems
+    inner_vals
 }
 
 pub fn get_name_sorter(vs: Vec<untyped::ValDecl>) -> Sorter<untyped::ValDecl> {
-    Sorter::create(vs, name_sorter_get_inner_elems)
+    Sorter::create(vs, get_inner_vals)
 }
 
 #[cfg(test)]

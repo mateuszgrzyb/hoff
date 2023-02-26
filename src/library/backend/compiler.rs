@@ -7,6 +7,7 @@ use inkwell::targets::{
 };
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs::remove_file;
 use std::path::Path;
 use std::process::Command;
@@ -40,14 +41,13 @@ impl TargetConfiguration {
 }
 
 impl<'ctx> Backend for Compiler<'ctx> {
-    fn run(&self) -> Result<(), String> {
+    fn run(&self) -> Result<(), Box<dyn Error>> {
         let target_config = self
             .target_machines
             .get(CURRENT_PLATFORM)
             .ok_or(format!("Unknown target: {}", CURRENT_PLATFORM))?;
 
-        let target = Target::from_triple(&target_config.target_triple)
-            .map_err(|err| err.to_string())?;
+        let target = Target::from_triple(&target_config.target_triple)?;
 
         let target_machine = target
             .create_target_machine(
@@ -60,30 +60,23 @@ impl<'ctx> Backend for Compiler<'ctx> {
             )
             .ok_or("Cannot create target machine")?;
 
-        target_machine
-            .write_to_file(
-                &self.module,
-                FileType::Object,
-                Path::new(&self.obj_file),
-            )
-            .map_err(|err| err.to_string())?;
+        target_machine.write_to_file(
+            &self.module,
+            FileType::Object,
+            Path::new(&self.obj_file),
+        )?;
 
         let command = target_config.link_command;
-        command(&self.obj_file, &self.output_file)
-            .output()
-            .map_err(|err| err.to_string())
-            .and_then(|output| {
-                let error = String::from_utf8(output.stderr)
-                    .map_err(|err| err.to_string())?;
 
-                if !error.is_empty() {
-                    return Err(error);
-                }
+        let output = command(&self.obj_file, &self.output_file).output()?;
 
-                Ok(())
-            })?;
+        let error = String::from_utf8(output.stderr)?;
 
-        remove_file(&self.obj_file).map_err(|err| err.to_string())?;
+        if !error.is_empty() {
+            return Err(error.into());
+        }
+
+        remove_file(&self.obj_file)?;
 
         Ok(())
     }
