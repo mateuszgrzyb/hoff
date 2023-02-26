@@ -606,7 +606,7 @@ impl<'ctx> CodeGen<'ctx> {
 
 #[cfg(test)]
 mod test {
-    use crate::library::codegen::*;
+    use super::*;
     use indoc::indoc;
     use rstest::*;
 

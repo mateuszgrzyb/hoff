@@ -1,10 +1,7 @@
 mod sorter;
-mod type_sorter;
 
 use crate::library::ast::{typed, untyped, SimpleType};
-use crate::library::qualify::global_decl_typechecker::type_sorter::{
-    get_name_sorter, get_type_sorter,
-};
+use crate::library::qualify::global_decl_typechecker::sorter::Sorter;
 use crate::library::qualify::{TypedGlobalDecls, UntypedGlobalDecls};
 use std::collections::HashMap;
 use std::error::Error;
@@ -61,7 +58,7 @@ impl GlobalDeclTypechecker {
         &mut self,
         ss: Vec<untyped::Struct>,
     ) -> TypeCheckResult<Vec<typed::Struct>> {
-        let mut type_sorter = get_type_sorter(ss);
+        let mut type_sorter = Sorter::create(ss);
         let ss = type_sorter.sort()?;
 
         let result = ss
@@ -109,7 +106,7 @@ impl GlobalDeclTypechecker {
         &self,
         vds: Vec<untyped::ValDecl>,
     ) -> TypeCheckResult<Vec<typed::ValDecl>> {
-        let mut name_sorter = get_name_sorter(vds);
+        let mut name_sorter = Sorter::create(vds);
         let vds = name_sorter.sort()?;
 
         vds.into_iter().map(|fd| self.check_val(fd)).collect()

@@ -15,7 +15,7 @@ pub fn get_binop(op: Op) -> impl FnMut(Expr, Expr) -> Expr {
 #[cfg(test)]
 #[allow(non_snake_case)]
 mod test {
-    use super::grammar::{ExprParser, FunParser, ModParser};
+    use super::grammar::*;
     use crate::library::ast::untyped::*;
     use rstest::*;
 
