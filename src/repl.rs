@@ -2,6 +2,7 @@ use crate::library::ast::untyped::Repl;
 use crate::library::backend::REPL;
 use crate::library::cli::Args;
 use crate::library::parser::grammar::{DeclParser, ExprParser};
+use crate::library::qualify::TypedGlobalDecls;
 use inkwell::context::Context;
 use std::error::Error;
 use std::io::{stdin, stdout, Write};
@@ -32,9 +33,7 @@ fn print_and_flush(text: &str) {
 pub fn repl(args: Args) -> ! {
     let context = Context::create();
 
-    let fds = Vec::new();
-    let ss = Vec::new();
-    let vs = Vec::new();
+    let global_decls = TypedGlobalDecls::create();
 
     let expr_parser = ExprParser::new();
     let decl_parser = DeclParser::new();
@@ -56,7 +55,7 @@ pub fn repl(args: Args) -> ! {
             .map_err(|err| println!("Parse error: {}", err))
         else { continue };
 
-        let mut repl = REPL::create(&fds, &ss, &vs, &context, args.o);
+        let mut repl = REPL::create(&global_decls, &context, args.o);
 
         let Ok(result) = repl.eval(expr)
             .map_err(|err| println!("Eval error: {}", err))

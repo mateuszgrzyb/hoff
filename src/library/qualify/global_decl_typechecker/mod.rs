@@ -2,44 +2,43 @@ mod sorter;
 mod type_sorter;
 
 use crate::library::ast::{typed, untyped, SimpleType};
-use crate::library::import_qualifier::typecheck_pre_qualified::type_sorter::{
+use crate::library::qualify::global_decl_typechecker::type_sorter::{
     get_name_sorter, get_type_sorter,
 };
+use crate::library::qualify::{TypedGlobalDecls, UntypedGlobalDecls};
 use std::collections::HashMap;
 use std::error::Error;
 
 type TypeCheckResult<V> = Result<V, Box<dyn Error>>;
 
-pub struct TypeCheckPreQualified {
+pub struct GlobalDeclTypechecker {
     types: HashMap<String, SimpleType>,
 }
 
-impl TypeCheckPreQualified {
+impl GlobalDeclTypechecker {
     pub fn create() -> Self {
         Self {
             types: Default::default(),
         }
     }
 
-    pub fn run(
+    pub fn check(
         &mut self,
-        fundecls: Vec<untyped::FunDecl>,
-        structs: Vec<untyped::Struct>,
-        valdecls: Vec<untyped::ValDecl>,
-    ) -> TypeCheckResult<(
-        Vec<typed::FunDecl>,
-        Vec<typed::Struct>,
-        Vec<typed::ValDecl>,
-    )> {
+        untyped_global_decls: UntypedGlobalDecls,
+    ) -> TypeCheckResult<TypedGlobalDecls> {
         self.populate_types();
 
-        let typed_structs = self.check_structs(structs)?;
+        let structs = self.check_structs(untyped_global_decls.structs)?;
 
-        let typed_fundecls = self.check_fundecls(fundecls)?;
+        let fundecls = self.check_fundecls(untyped_global_decls.fundecls)?;
 
-        let typed_valdecls = self.check_valdecls(valdecls)?;
+        let vals = self.check_vals(untyped_global_decls.vals)?;
 
-        Ok((typed_fundecls, typed_structs, typed_valdecls))
+        Ok(TypedGlobalDecls {
+            fundecls,
+            structs,
+            vals,
+        })
     }
 
     fn populate_types(&mut self) {
@@ -47,6 +46,15 @@ impl TypeCheckPreQualified {
         self.types.insert("Bool".to_string(), SimpleType::Bool);
         self.types.insert("Float".to_string(), SimpleType::Float);
         self.types.insert("String".to_string(), SimpleType::String);
+    }
+
+    fn check_args(
+        &self,
+        args: Vec<(String, untyped::Type)>,
+    ) -> TypeCheckResult<Vec<(String, typed::Type)>> {
+        args.into_iter()
+            .map(|(n, t)| Ok((n, self.get_type(t)?)))
+            .collect::<TypeCheckResult<_>>()
     }
 
     fn check_structs(
@@ -74,11 +82,7 @@ impl TypeCheckPreQualified {
         s: untyped::Struct,
     ) -> TypeCheckResult<typed::Struct> {
         let name = s.name;
-        let args = s
-            .args
-            .into_iter()
-            .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
-            .collect::<TypeCheckResult<_>>()?;
+        let args = self.check_args(s.args)?;
 
         Ok(typed::Struct { name, args })
     }
@@ -95,27 +99,23 @@ impl TypeCheckPreQualified {
         fd: untyped::FunDecl,
     ) -> TypeCheckResult<typed::FunDecl> {
         let name = fd.name;
-        let args = fd
-            .args
-            .into_iter()
-            .map(|(n, t)| self.get_type(t).map(|t| (n, t)))
-            .collect::<TypeCheckResult<_>>()?;
+        let args = self.check_args(fd.args)?;
         let rt = self.get_type(fd.rt)?;
 
         Ok(typed::FunDecl { name, args, rt })
     }
 
-    fn check_valdecls(
+    fn check_vals(
         &self,
         vds: Vec<untyped::ValDecl>,
     ) -> TypeCheckResult<Vec<typed::ValDecl>> {
         let mut name_sorter = get_name_sorter(vds);
         let vds = name_sorter.sort()?;
 
-        vds.into_iter().map(|fd| self.check_valdecl(fd)).collect()
+        vds.into_iter().map(|fd| self.check_val(fd)).collect()
     }
 
-    fn check_valdecl(
+    fn check_val(
         &self,
         vd: untyped::ValDecl,
     ) -> TypeCheckResult<typed::ValDecl> {

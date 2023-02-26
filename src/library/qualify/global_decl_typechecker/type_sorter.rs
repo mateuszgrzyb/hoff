@@ -1,5 +1,5 @@
 use crate::library::ast::untyped;
-use crate::library::import_qualifier::typecheck_pre_qualified::sorter::{
+use crate::library::qualify::global_decl_typechecker::sorter::{
     Mark, MarkedNode, Sorter,
 };
 use std::collections::HashMap;
@@ -53,7 +53,7 @@ pub fn get_name_sorter(vs: Vec<untyped::ValDecl>) -> Sorter<untyped::ValDecl> {
 #[cfg(test)]
 mod test {
     use crate::library::ast::Type;
-    use crate::library::import_qualifier::typecheck_pre_qualified::*;
+    use crate::library::qualify::global_decl_typechecker::*;
     use rstest::*;
 
     #[rstest]

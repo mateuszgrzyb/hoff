@@ -1,7 +1,7 @@
 use crate::library::ast::{typed, untyped, SimpleType};
 use crate::library::backend::get_opt_level;
 use crate::library::codegen::CodeGen;
-use crate::library::import_qualifier::ImportQualifier;
+use crate::library::qualify::{ImportQualifier, TypedGlobalDecls};
 use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::execution_engine::ExecutionEngine;
@@ -17,9 +17,7 @@ pub struct REPL<'init, 'ctx> {
 
 impl<'init, 'ctx> REPL<'init, 'ctx> {
     pub fn create(
-        fds: &'init Vec<typed::FunDecl>,
-        ss: &'init Vec<typed::Struct>,
-        vs: &'init Vec<typed::ValDecl>,
+        global_decls: &'init TypedGlobalDecls,
         context: &'ctx Context,
         opt_level: u32,
     ) -> Self {
@@ -30,7 +28,7 @@ impl<'init, 'ctx> REPL<'init, 'ctx> {
             .create_jit_execution_engine(opt_level)
             .unwrap();
 
-        let import_qualifier = ImportQualifier::create(&fds, &ss, &vs);
+        let import_qualifier = ImportQualifier::create(&global_decls);
 
         Self {
             typechecker: TypeChecker::create(),

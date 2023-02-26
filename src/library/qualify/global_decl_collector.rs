@@ -1,12 +1,13 @@
 use crate::library::ast::untyped::*;
+use crate::library::qualify::UntypedGlobalDecls;
 
-pub struct ImportPreQualifier {
+pub struct GlobalDeclCollector {
     fundecls: Vec<FunDecl>,
     structs: Vec<Struct>,
     vals: Vec<ValDecl>,
 }
 
-impl ImportPreQualifier {
+impl GlobalDeclCollector {
     pub fn create() -> Self {
         Self {
             fundecls: Vec::new(),
@@ -15,25 +16,23 @@ impl ImportPreQualifier {
         }
     }
 
-    pub fn pre_qualify(
-        &mut self,
-        ms: &Vec<Mod>,
-    ) -> (Vec<FunDecl>, Vec<Struct>, Vec<ValDecl>) {
-        ms.into_iter().for_each(|m| self.pre_qualify_mod(m));
-        (
-            self.fundecls.clone(),
-            self.structs.clone(),
-            self.vals.clone(),
-        )
-    }
+    pub fn collect(&mut self, ms: &Vec<Mod>) -> UntypedGlobalDecls {
+        ms.into_iter().for_each(|m| self.process_mod(m));
 
-    fn pre_qualify_mod(&mut self, m: &Mod) {
-        for d in &m.decls {
-            self.pre_qualify_decl(d)
+        UntypedGlobalDecls {
+            fundecls: self.fundecls.clone(),
+            structs: self.structs.clone(),
+            vals: self.vals.clone(),
         }
     }
 
-    fn pre_qualify_decl(&mut self, d: &Decl) {
+    fn process_mod(&mut self, m: &Mod) {
+        for d in &m.decls {
+            self.process_decl(d)
+        }
+    }
+
+    fn process_decl(&mut self, d: &Decl) {
         match d {
             Decl::Fun(f) => {
                 let fundecl = FunDecl {

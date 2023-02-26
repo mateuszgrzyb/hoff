@@ -4,10 +4,10 @@ use crate::library::ast::{qualified, typed, untyped};
 use crate::library::backend::{Backend, Compiler, Interpreter};
 use crate::library::cli::{Args, DumpMode, RunMode};
 use crate::library::codegen::CodeGen;
-use crate::library::import_qualifier::{
-    ImportPreQualifier, ImportQualifier, TypeCheckPreQualified,
-};
 use crate::library::parser::grammar::ModParser;
+use crate::library::qualify::{
+    GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
+};
 use crate::library::typecheck::TypeChecker;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -112,15 +112,16 @@ impl Compile {
     where
         MS: Iterator<Item = untyped::Mod>,
     {
-        let mut ipq = ImportPreQualifier::create();
-        let mut tcpq = TypeCheckPreQualified::create();
-
         let ms = ms.collect::<Vec<_>>();
 
-        let (fds, ss, vs) = ipq.pre_qualify(&ms);
-        let (fds, ss, vs) = tcpq.run(fds, ss, vs)?;
+        let mut global_decl_collector = GlobalDeclCollector::create();
+        let mut global_decl_typechecker = GlobalDeclTypechecker::create();
 
-        let mut qualifier = ImportQualifier::create(&fds, &ss, &vs);
+        let untyped_global_decls = global_decl_collector.collect(&ms);
+        let typed_global_decls =
+            global_decl_typechecker.check(untyped_global_decls)?;
+
+        let mut qualifier = ImportQualifier::create(&typed_global_decls);
 
         ms.clone()
             .into_iter()

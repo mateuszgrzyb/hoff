@@ -1,4 +1,4 @@
-use crate::library::import_qualifier::Nameable;
+use crate::library::qualify::Nameable;
 use std::collections::HashMap;
 use std::error::Error;
 

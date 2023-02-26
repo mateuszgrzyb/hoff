@@ -100,9 +100,9 @@ impl TypeChecker {
             .iter()
             .find(|vd| vd.name == name)
         {
-            let argts = f.args.clone().into_iter().map(|a| a.1).collect();
+            let arg_types = f.args.clone().into_iter().map(|a| a.1).collect();
             let rt = f.rt.clone();
-            return Ok((argts, rt));
+            return Ok((arg_types, rt));
         }
 
         Err(format!("Cant find function {}", name).into())
@@ -459,7 +459,7 @@ impl TypeChecker {
         name: String,
         args: Vec<qualified::Expr>,
     ) -> CheckResult<typed::Expr> {
-        let (argvs, argts): (Vec<typed::Expr>, Vec<typed::Type>) = args
+        let (arg_values, arg_types): (Vec<typed::Expr>, Vec<typed::Type>) = args
             .into_iter()
             .map(|a| self.typecheck_expr(a))
             .collect::<Result<Vec<TypedValue<typed::Expr, typed::Type>>, _>>()?
@@ -467,49 +467,42 @@ impl TypeChecker {
             .map(|TypedValue { v, t }| (v, t))
             .unzip();
         let name = self.namespace.get_qualified_name(name);
-        let (exp_argts, rt) = self.get_function(name.clone())?;
+        let (exp_arg_types, rt) = self.get_function(name.clone())?;
 
-        if exp_argts.len() < argts.len() {
+        let exp_no_of_args = exp_arg_types.len();
+        let no_of_args = arg_types.len();
+
+        if exp_no_of_args < no_of_args {
             return Err(format!(
                 "Invalid number of arguments: expected: {:?}, actual: {:?}",
-                exp_argts.len(),
-                argts.len()
+                exp_arg_types.len(),
+                arg_types.len()
             )
             .into());
-        } else if exp_argts.len() == argts.len() {
-            // regular function
-            for (exp_argt, argt) in
-                exp_argts.iter().zip::<Vec<typed::Type>>(argts)
-            {
-                if *exp_argt != argt {
-                    return Err(format!(
-                        "Invalid argument type: {:?} != {:?}",
-                        exp_argt, argt
-                    )
-                    .into());
-                }
-            }
+        }
 
+        for (exp_arg_type, arg_type) in
+            exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types)
+        {
+            if *exp_arg_type != arg_type {
+                return Err(format!(
+                    "Invalid argument type: {:?} != {:?}",
+                    exp_arg_type, arg_type
+                )
+                .into());
+            }
+        }
+
+        if exp_no_of_args == no_of_args {
+            // regular function
             return TypedValue::get(
-                Expr::Call(name.clone(), argvs),
+                Expr::Call(name.clone(), arg_values),
                 rt.clone(),
             );
         } else {
             // partial function application
-            let mut exp_argts = exp_argts.clone();
-            let mut exp_rt = exp_argts.split_off(argts.len());
-
-            for (exp_argt, argt) in
-                exp_argts.iter().zip::<Vec<typed::Type>>(argts)
-            {
-                if *exp_argt != argt {
-                    return Err(format!(
-                        "Invalid argument type: {:?} != {:?}",
-                        exp_argt, argt
-                    )
-                    .into());
-                }
-            }
+            let mut exp_arg_types = exp_arg_types.clone();
+            let mut exp_rt = exp_arg_types.split_off(no_of_args);
 
             exp_rt.push(rt.clone());
 
@@ -522,7 +515,7 @@ impl TypeChecker {
                 .collect();
             let body = Expr::Call(
                 name,
-                argvs
+                arg_values
                     .into_iter()
                     .chain(
                         exp_rt
@@ -710,7 +703,7 @@ mod test {
     }
 
     #[rstest]
-    fn test_typecheck_assing_error(mut typechecker: TypeChecker) {
+    fn test_typecheck_assign_error(mut typechecker: TypeChecker) {
         let name = "foo".to_string();
         let type_ = Type::Simple("Int".to_string());
         let expr = Expr::Lit(Lit::Bool(false));

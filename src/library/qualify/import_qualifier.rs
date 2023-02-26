@@ -1,28 +1,21 @@
 use crate::library::ast::typed::{FunDecl, Struct, ValDecl};
 use crate::library::ast::{qualified, untyped, Decl, Mod};
+use crate::library::qualify::TypedGlobalDecls;
 use std::error::Error;
 
 type QualifyResult<V> = Result<V, Box<dyn Error>>;
 
 pub struct ImportQualifier<'init> {
-    global_fundecls: &'init Vec<FunDecl>,
-    global_structs: &'init Vec<Struct>,
-    global_vals: &'init Vec<ValDecl>,
+    global_decls: &'init TypedGlobalDecls,
     fundecls: Vec<FunDecl>,
     structs: Vec<Struct>,
     vals: Vec<ValDecl>,
 }
 
 impl<'init> ImportQualifier<'init> {
-    pub fn create(
-        fundecls: &'init Vec<FunDecl>,
-        structs: &'init Vec<Struct>,
-        vals: &'init Vec<ValDecl>,
-    ) -> Self {
+    pub fn create(global_decls: &'init TypedGlobalDecls) -> Self {
         Self {
-            global_fundecls: fundecls,
-            global_structs: structs,
-            global_vals: vals,
+            global_decls,
             fundecls: Vec::new(),
             structs: Vec::new(),
             vals: Vec::new(),
@@ -98,8 +91,9 @@ impl<'init> ImportQualifier<'init> {
         let (_, name) = i;
 
         if let Some(s) = self
-            .global_structs
-            .into_iter()
+            .global_decls
+            .structs
+            .iter()
             .find(|s| s.name == name)
             .cloned()
         {
@@ -108,8 +102,9 @@ impl<'init> ImportQualifier<'init> {
         };
 
         if let Some(fd) = self
-            .global_fundecls
-            .into_iter()
+            .global_decls
+            .fundecls
+            .iter()
             .find(|fd| fd.name == name)
             .cloned()
         {
@@ -118,8 +113,9 @@ impl<'init> ImportQualifier<'init> {
         };
 
         if let Some(v) = self
-            .global_vals
-            .into_iter()
+            .global_decls
+            .vals
+            .iter()
             .find(|v| v.name == name)
             .cloned()
         {

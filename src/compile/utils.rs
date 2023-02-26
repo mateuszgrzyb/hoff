@@ -1,6 +1,6 @@
 use crate::library::cli::{Args, DumpTarget};
 use crate::library::codegen::CodeGen;
-use crate::library::import_qualifier::Nameable;
+use crate::library::qualify::Nameable;
 use inkwell::context::Context;
 use std::error::Error;
 use std::fmt::Debug;
