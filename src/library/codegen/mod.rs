@@ -42,21 +42,11 @@ impl<'ctx> CodeGen<'ctx> {
             bool: context.bool_type(),
             string: context.i8_type().ptr_type(AddressSpace::default()),
         };
-        let mut functions = HashMap::new();
 
-        if add_stdlib {
-            let puts = module.add_function(
-                "puts",
-                context.i32_type().fn_type(
-                    &[BasicMetadataTypeEnum::from(
-                        context.i8_type().ptr_type(AddressSpace::default()),
-                    )],
-                    false,
-                ),
-                None,
-            );
-
-            functions.insert("puts".to_string(), puts);
+        let functions = if add_stdlib {
+            Self::create_stdlib(context, &module)
+        } else {
+            HashMap::new()
         };
 
         Self {
@@ -72,6 +62,47 @@ impl<'ctx> CodeGen<'ctx> {
             closures: HashMap::new(),
             current_function: None,
         }
+    }
+
+    fn create_stdlib(
+        context: &'ctx Context,
+        module: &Module<'ctx>,
+    ) -> HashMap<String, FunctionValue<'ctx>> {
+        [
+            (
+                "puts",
+                context.i32_type().fn_type(
+                    &[BasicMetadataTypeEnum::from(
+                        context.i8_type().ptr_type(AddressSpace::default()),
+                    )],
+                    false,
+                ),
+            ),
+            (
+                "sprintf",
+                context.i32_type().fn_type(
+                    &[
+                        BasicMetadataTypeEnum::from(
+                            context
+                                .i8_type()
+                                .ptr_type(AddressSpace::default()),
+                        ),
+                        BasicMetadataTypeEnum::from(
+                            context
+                                .i8_type()
+                                .ptr_type(AddressSpace::default()),
+                        ),
+                    ],
+                    true,
+                ),
+            ),
+        ]
+        .into_iter()
+        .map(|(name, f_type)| {
+            let f = module.add_function(name, f_type, None);
+            (name.to_string(), f)
+        })
+        .collect()
     }
 
     fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
@@ -288,6 +319,9 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::If(be, e1, e2) => self.compile_if(*be, *e1, *e2),
             Expr::Attr(name, t, attr) => self.compile_attr(name, t, attr),
             Expr::New(name, args) => self.compile_new(name, args),
+            Expr::StringTemplate(template, args) => {
+                self.compile_string_template(template, args)
+            }
         }
     }
 
@@ -417,13 +451,12 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         if let Some(f) = self.functions.get(name.as_str()) {
-            let value = self
+            return self
                 .builder
                 .build_call(f.clone(), &[], "call")
                 .try_as_basic_value()
                 .left()
                 .unwrap();
-            return value;
         }
 
         panic!("unknown value {name}")
@@ -601,6 +634,43 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.build_store(struct_ptr, struct_value);
 
         struct_ptr.as_basic_value_enum()
+    }
+
+    fn compile_string_template(
+        &mut self,
+        template: String,
+        values: Vec<String>,
+    ) -> Value<'ctx> {
+        let mut values: Vec<BasicMetadataValueEnum<'ctx>> = values
+            .into_iter()
+            .map(|value| self.compile_value(value).into())
+            .collect::<Vec<_>>();
+
+        let template_value = self
+            .builder
+            .build_global_string_ptr(&template, "str_tmpl")
+            .as_basic_value_enum();
+
+        let template_value_result = self
+            .builder
+            .build_global_string_ptr("", "str_tmpl_rstl")
+            .as_basic_value_enum();
+
+        let mut sprintf_args = Vec::from([
+            template_value_result.clone().into(),
+            template_value.into(),
+        ]);
+        sprintf_args.append(&mut values);
+
+        let sprintf = self.functions.get("sprintf").unwrap();
+
+        self.builder
+            .build_call(*sprintf, &sprintf_args[..], "run_str_tmpl")
+            .try_as_basic_value()
+            .left()
+            .unwrap();
+
+        template_value_result
     }
 }
 

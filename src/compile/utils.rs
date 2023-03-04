@@ -12,7 +12,7 @@ where
     I: Iterator<Item = T>,
 {
     for m in ms {
-        let contents = format!("{:?}", m);
+        let contents = format!("{:#?}", m);
         match args.dump_target {
             DumpTarget::File => write(m.get_name(), contents)?,
             DumpTarget::StdOut => println!("{contents}"),
