@@ -5,6 +5,8 @@ source_filename = "tests/data/test4/input3.hff.ir"
 
 declare i32 @puts(i8*)
 
+declare i32 @sprintf(i8*, i8*, ...)
+
 define %Student.0* @create_student(i8* %name, i32 %age) {
 entry:
   %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student.0* getelementptr (%Student.0, %Student.0* null, i32 1) to i32))

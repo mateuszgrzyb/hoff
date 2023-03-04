@@ -67,6 +67,7 @@ impl GlobalDeclCollector {
             Expr::If(ie, e1, e2) => self._map(Vec::from([*ie, *e1, *e2])),
             Expr::Attr(_, _, _) => Vec::new(),
             Expr::New(_, args) => self._map(args),
+            Expr::StringTemplate(_, args) => args,
         }
     }
 

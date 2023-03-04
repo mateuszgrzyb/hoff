@@ -1,4 +1,5 @@
 use rstest::*;
+use similar::{ChangeTag, TextDiff};
 use std::fs::{read_dir, read_to_string, DirEntry};
 use std::path::PathBuf;
 use std::process::Command;
@@ -70,8 +71,6 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
     )
     .unwrap();
 
-    println!("{:#?} {:#?}", input_files, output_files);
-
     let expected_output = output_files
         .into_iter()
         .map(|of| {
@@ -91,8 +90,18 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
 
-    println!("stdout: {}", stdout);
     println!("stderr: {}", stderr);
+
+    let diff = TextDiff::from_lines(stdout.as_str(), expected_output.as_str());
+
+    for change in diff.iter_all_changes() {
+        let sign = match change.tag() {
+            ChangeTag::Delete => "-",
+            ChangeTag::Insert => "+",
+            ChangeTag::Equal => " ",
+        };
+        print!("{}{}", sign, change);
+    }
 
     assert!(stderr.is_empty());
     assert_eq!(stdout, expected_output);

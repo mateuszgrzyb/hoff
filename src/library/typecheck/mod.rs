@@ -5,8 +5,10 @@ use crate::library::ast::{
     qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
     Val,
 };
+use crate::library::utils::STRING_TEMPLATE_RE;
 use closure_manager::ClosureManager;
 use namespace::Namespace;
+use regex::Captures;
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -327,13 +329,31 @@ impl TypeChecker {
         expr: qualified::Expr,
     ) -> CheckResult<typed::Expr> {
         match expr {
-            Expr::BinOp(lh, op, rh) => self.typecheck_binop(*lh, op, *rh),
-            Expr::Lit(l) => self.typecheck_lit(l),
-            Expr::Value(name) => self.typecheck_value(name),
-            Expr::Assign((name, type_), val) => {
-                self.typecheck_assign(name, type_, *val)
+            Expr::BinOp(lh, op, rh) => {
+                let TypedValue { v: (lh, op, rh), t } =
+                    self.typecheck_binop(*lh, op, *rh)?;
+                TypedValue::get(Expr::BinOp(Box::new(lh), op, Box::new(rh)), t)
             }
-            Expr::Chain(lh, rh) => self.typecheck_chain(*lh, *rh),
+            Expr::Lit(l) => {
+                let TypedValue { v, t } = self.typecheck_lit(l)?;
+                TypedValue::get(Expr::Lit(v), t)
+            }
+            Expr::Value(name) => {
+                let TypedValue { v, t } = self.typecheck_value(name)?;
+                TypedValue::get(Expr::Value(v), t)
+            }
+            Expr::Assign((name, type_), val) => {
+                let TypedValue {
+                    v: (name, type_, val),
+                    t,
+                } = self.typecheck_assign(name, type_, *val)?;
+                TypedValue::get(Expr::Assign((name, type_), Box::new(val)), t)
+            }
+            Expr::Chain(lh, rh) => {
+                let TypedValue { v: (lh, rh), t } =
+                    self.typecheck_chain(*lh, *rh)?;
+                TypedValue::get(Expr::Chain(Box::new(lh), Box::new(rh)), t)
+            }
             Expr::Function(f, _) => {
                 let closure = self.closure_manager.clone();
                 self.closure_manager.push_layer();
@@ -342,9 +362,33 @@ impl TypeChecker {
                 TypedValue::get(Expr::Function(Box::new(f.v), closure), f.t)
             }
             Expr::Call(name, args) => self.typecheck_call(name, args),
-            Expr::If(be, e1, e2) => self.typecheck_if(*be, *e1, *e2),
-            Expr::Attr(name, _, attr) => self.typecheck_attr(name, attr),
-            Expr::New(name, args) => self.typecheck_new(name, args),
+            Expr::If(be, e1, e2) => {
+                let TypedValue { v: (be, e1, e2), t } =
+                    self.typecheck_if(*be, *e1, *e2)?;
+                TypedValue::get(
+                    Expr::If(Box::new(be), Box::new(e1), Box::new(e2)),
+                    t,
+                )
+            }
+            Expr::Attr(name, _, attr) => {
+                let TypedValue {
+                    v: (name, struct_, attr),
+                    t,
+                } = self.typecheck_attr(name, attr)?;
+                TypedValue::get(Expr::Attr(name, struct_, attr), t)
+            }
+            Expr::New(name, args) => {
+                let TypedValue { v: (name, args), t } =
+                    self.typecheck_new(name, args)?;
+                TypedValue::get(Expr::New(name, args), t)
+            }
+            Expr::StringTemplate(template, values) => {
+                let TypedValue {
+                    v: (template, values),
+                    t,
+                } = self.typecheck_string_template(template, values)?;
+                TypedValue::get(Expr::StringTemplate(template, values), t)
+            }
         }
     }
 
@@ -353,7 +397,7 @@ impl TypeChecker {
         lh: qualified::Expr,
         op: Op,
         rh: qualified::Expr,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(typed::Expr, Op, typed::Expr)> {
         let lh = self.typecheck_expr(lh)?;
         let rh = self.typecheck_expr(rh)?;
 
@@ -376,21 +420,17 @@ impl TypeChecker {
             (
                 SimpleType::Int | SimpleType::Float,
                 op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
-            ) => TypedValue::get(
-                Expr::BinOp(Box::new(lh.v), op, Box::new(rh.v)),
-                Type::Simple(rht),
-            ),
+            ) => TypedValue::get((lh.v, op, rh.v), Type::Simple(rht)),
             (
                 SimpleType::Int | SimpleType::Float,
                 op @ (Op::Lt | Op::Le | Op::Ne | Op::Eq | Op::Ge | Op::Gt),
             ) => TypedValue::get(
-                Expr::BinOp(Box::new(lh.v), op, Box::new(rh.v)),
+                (lh.v, op, rh.v),
                 Type::Simple(SimpleType::Bool),
             ),
-            (SimpleType::Bool, op @ (Op::And | Op::Or)) => TypedValue::get(
-                Expr::BinOp(Box::new(lh.v), op, Box::new(rh.v)),
-                Type::Simple(rht),
-            ),
+            (SimpleType::Bool, op @ (Op::And | Op::Or)) => {
+                TypedValue::get((lh.v, op, rh.v), Type::Simple(rht))
+            }
             (lht, op) => Err(format!(
                 "Invalid operation type: {:?} {:?} {:?}",
                 lht, op, rh.t
@@ -399,22 +439,21 @@ impl TypeChecker {
         }
     }
 
-    fn typecheck_lit(&self, lit: Lit) -> CheckResult<typed::Expr> {
+    fn typecheck_lit(&self, lit: Lit) -> CheckResult<typed::Lit> {
         let t = match lit {
             Lit::Int(_) => SimpleType::Int,
             Lit::Bool(_) => SimpleType::Bool,
             Lit::Float(_) => SimpleType::Float,
             Lit::String(_) => SimpleType::String,
         };
-        let v = Expr::Lit(lit);
 
-        TypedValue::get(v, Type::Simple(t))
+        TypedValue::get(lit, Type::Simple(t))
     }
 
-    fn typecheck_value(&mut self, name: String) -> CheckResult<typed::Expr> {
+    fn typecheck_value(&mut self, name: String) -> CheckResult<String> {
         let type_ = self.get_value(name.clone())?;
 
-        TypedValue::get(Expr::Value(name), type_.clone())
+        TypedValue::get(name, type_.clone())
     }
 
     fn typecheck_assign(
@@ -422,7 +461,7 @@ impl TypeChecker {
         name: String,
         type_: qualified::Type,
         expr: qualified::Expr,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(String, typed::Type, typed::Expr)> {
         let type_ = self.get_type(type_)?;
         let expr = self.typecheck_expr(expr)?;
 
@@ -437,21 +476,18 @@ impl TypeChecker {
         self.values.insert(name.clone(), type_.clone());
         self.closure_manager.push(name.clone(), type_.clone());
 
-        TypedValue::get(
-            Expr::Assign((name, type_.clone()), Box::new(expr.v)),
-            type_,
-        )
+        TypedValue::get((name, type_.clone(), expr.v), type_)
     }
 
     fn typecheck_chain(
         &mut self,
         lh: qualified::Expr,
         rh: qualified::Expr,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(typed::Expr, typed::Expr)> {
         let lh = self.typecheck_expr(lh)?;
         let rh = self.typecheck_expr(rh)?;
 
-        TypedValue::get(Expr::Chain(Box::new(lh.v), Box::new(rh.v)), rh.t)
+        TypedValue::get((lh.v, rh.v), rh.t)
     }
 
     fn typecheck_call(
@@ -548,7 +584,7 @@ impl TypeChecker {
         be: qualified::Expr,
         e1: qualified::Expr,
         e2: qualified::Expr,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(typed::Expr, typed::Expr, typed::Expr)> {
         let be = self.typecheck_expr(be)?;
         let e1 = self.typecheck_expr(e1)?;
         let e2 = self.typecheck_expr(e2)?;
@@ -561,17 +597,14 @@ impl TypeChecker {
             .into());
         };
 
-        TypedValue::get(
-            Expr::If(Box::new(be.v), Box::new(e1.v), Box::new(e2.v)),
-            e1.t,
-        )
+        TypedValue::get((be.v, e1.v, e2.v), e1.t)
     }
 
     fn typecheck_attr(
         &self,
         name: String,
         attr: String,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(String, typed::Struct, String)> {
         let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
             return Err(format!(
                 "Struct `{name}` does not exist.",
@@ -584,27 +617,60 @@ impl TypeChecker {
             ).into());
         };
 
-        TypedValue::get(Expr::Attr(name, struct_.clone(), attr), type_.clone())
+        TypedValue::get((name, struct_.clone(), attr), type_.clone())
     }
 
     fn typecheck_new(
         &mut self,
         name: String,
         args: Vec<qualified::Expr>,
-    ) -> CheckResult<typed::Expr> {
+    ) -> CheckResult<(String, Vec<typed::Expr>)> {
         let args = args
             .into_iter()
             .map(|e| self.typecheck_expr(e).map(|tv| tv.v))
             .collect::<Result<Vec<typed::Expr>, _>>()?;
-
         let struct_args = self.get_struct(name.clone()).map(|s| s.args)?;
 
         TypedValue::get(
-            Expr::New(name.clone(), args),
+            (name.clone(), args),
             Type::Simple(SimpleType::Struct(Struct {
                 name: name.clone(),
                 args: struct_args.clone(),
             })),
+        )
+    }
+
+    fn typecheck_string_template(
+        &mut self,
+        template: String,
+        values: Vec<String>,
+    ) -> CheckResult<(String, Vec<String>)> {
+        let mut typed_args = Vec::new();
+        let mut types_by_value_map = HashMap::new();
+
+        for value in values {
+            let TypedValue { v: name, t } = self.typecheck_value(value)?;
+            typed_args.push(name.clone());
+            types_by_value_map.insert(name, t);
+        }
+
+        let typed_template = STRING_TEMPLATE_RE
+            .replace_all(template.as_str(), |caps: &Captures| {
+                let a = &caps[1];
+                match types_by_value_map[a] {
+                    Type::Simple(SimpleType::Int) => "%d",
+                    Type::Simple(SimpleType::Bool) => "%d",
+                    Type::Simple(SimpleType::Float) => "%F",
+                    Type::Simple(SimpleType::String) => "%s",
+                    Type::Simple(SimpleType::Struct(_)) => todo!(),
+                    Type::Function(_) => todo!(),
+                }
+            })
+            .into_owned();
+
+        TypedValue::get(
+            (typed_template, typed_args),
+            Type::Simple(SimpleType::String),
         )
     }
 }
@@ -632,7 +698,7 @@ mod test {
     ) {
         // given
         let expected_result = TypedValue {
-            v: Expr::Lit(lit.clone()),
+            v: lit.clone(),
             t: Type::Simple(type_),
         };
 
@@ -652,7 +718,7 @@ mod test {
         let type_ = Type::Simple(SimpleType::String);
         typechecker.values.insert(name.clone(), type_.clone());
         let expected_result = TypedValue {
-            v: Expr::Value(name.clone()),
+            v: name.clone(),
             t: type_.clone(),
         };
 
@@ -684,9 +750,10 @@ mod test {
         let type_ = Type::Simple("Int".to_string());
         let expr = Expr::Lit(Lit::Int(32));
         let expected_result = TypedValue {
-            v: Expr::Assign(
-                (name.clone(), Type::Simple(SimpleType::Int)),
-                Box::new(Expr::Lit(Lit::Int(32))),
+            v: (
+                name.clone(),
+                Type::Simple(SimpleType::Int),
+                Expr::Lit(Lit::Int(32)),
             ),
             t: Type::Simple(SimpleType::Int),
         };
@@ -724,9 +791,9 @@ mod test {
         let lh = Expr::Lit(Lit::Int(32));
         let rh = Expr::Lit(Lit::Float("32.0".to_string()));
         let expected_result = TypedValue {
-            v: Expr::Chain(
-                Box::new(Expr::Lit(Lit::Int(32))),
-                Box::new(Expr::Lit(Lit::Float("32.0".to_string()))),
+            v: (
+                Expr::Lit(Lit::Int(32)),
+                Expr::Lit(Lit::Float("32.0".to_string())),
             ),
             t: Type::Simple(SimpleType::Float),
         };
@@ -848,10 +915,10 @@ mod test {
         let e1 = Expr::Lit(Lit::Int(1));
         let e2 = Expr::Lit(Lit::Int(2));
         let expected_result = TypedValue {
-            v: Expr::If(
-                Box::new(Expr::Lit(Lit::Bool(true))),
-                Box::new(Expr::Lit(Lit::Int(1))),
-                Box::new(Expr::Lit(Lit::Int(2))),
+            v: (
+                Expr::Lit(Lit::Bool(true)),
+                Expr::Lit(Lit::Int(1)),
+                Expr::Lit(Lit::Int(2)),
             ),
             t: Type::Simple(SimpleType::Int),
         };

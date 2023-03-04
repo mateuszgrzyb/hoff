@@ -1,5 +1,6 @@
 use crate::library::ast::untyped::*;
 use crate::library::parser::get_binop;
+use lalrpop_util::ParseError;
 
 grammar;
 
@@ -12,6 +13,7 @@ match {
     "true" => TRUE,
     "false" => FALSE,
     "if", "else",
+    "$",
     "&&", "||",
     "<", "<=", "!=", "==", ">=", ">",
     ",", "::", ":",
@@ -26,8 +28,11 @@ match {
     r"[A-Z][a-zA-Z_0-9]*" => TID,
     r"-?[0-9]+" => INT,
     r"-?[0-9]+\.[0-9]*" => FLOAT,
-    r#"".*""# => STRING,
+    r#""(?:(?:[^"])*(?:\\[/bfnrt]|\\u[0-9a-fA-F]{4}|\\\\)?)+""# => _STRING,
 }
+
+STRING: String =
+    <s: _STRING> => s[1..s.len()-1].to_string();
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -69,11 +74,13 @@ Lit: Lit = {
     FLOAT => Lit::Float(<>.to_string()),
     TRUE => Lit::Bool(true),
     FALSE => Lit::Bool(false),
-    STRING => Lit::String(<>.to_string()),
+    STRING => Lit::String(<>),
 };
 
 Expr0: Expr = {
     "(" <Expr> ")",
+    "$" <f: STRING> =>? Expr::create_string_template(f)
+        .map_err(|error| ParseError::User { error } ),
 };
 
 Expr1: Expr = {

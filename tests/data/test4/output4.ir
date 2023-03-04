@@ -3,9 +3,11 @@ source_filename = "tests/data/test4/input4.hff.ir"
 
 %Student.1 = type <{ i8*, i32 }>
 
-@0 = private unnamed_addr constant [6 x i8] c"\22ala\22\00", align 1
+@0 = private unnamed_addr constant [4 x i8] c"ala\00", align 1
 
 declare i32 @puts(i8*)
+
+declare i32 @sprintf(i8*, i8*, ...)
 
 declare i8* @get_name(%Student.1*)
 
@@ -15,7 +17,7 @@ declare %Student.1* @create_student(i8*, i32)
 
 define i32 @main() {
 entry:
-  %call = call %Student.1* @create_student(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @0, i32 0, i32 0), i32 32)
+  %call = call %Student.1* @create_student(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @0, i32 0, i32 0), i32 32)
   %call1 = call i8* @get_name(%Student.1* %call)
   %call2 = call i32 @get_age(%Student.1* %call)
   ret i32 33

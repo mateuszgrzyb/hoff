@@ -5,6 +5,8 @@ source_filename = "tests/data/test4/input2.hff.ir"
 
 declare i32 @puts(i8*)
 
+declare i32 @sprintf(i8*, i8*, ...)
+
 define i8* @get_name(%Student* %s) {
 entry:
   %attr = getelementptr inbounds %Student, %Student* %s, i32 0, i32 0
