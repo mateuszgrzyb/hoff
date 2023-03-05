@@ -74,8 +74,8 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
 
     let return_value_repr = unsafe {
       let Ok(main) = self.execution_engine.get_function_value("main") else {
-                return Err("some error happened".into())
-            };
+        return Err("some error happened".into())
+      };
 
       let return_value = self.execution_engine.run_function(main, &[]);
 
