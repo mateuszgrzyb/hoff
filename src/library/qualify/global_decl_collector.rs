@@ -1,7 +1,4 @@
-use crate::library::{
-  ast::untyped::*,
-  qualify::UntypedGlobalDecls,
-};
+use crate::library::{ast::untyped::*, qualify::UntypedGlobalDecls};
 
 pub struct GlobalDeclCollector {
   fundecls: Vec<FunDecl>,

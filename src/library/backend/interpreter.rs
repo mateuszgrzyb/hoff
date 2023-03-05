@@ -1,22 +1,12 @@
 use std::error::Error;
 
-use inkwell::{
-  context::Context,
-  execution_engine::ExecutionEngine,
-};
+use inkwell::{context::Context, execution_engine::ExecutionEngine};
 
 use crate::library::{
-  ast::{
-    typed,
-    untyped,
-    SimpleType,
-  },
+  ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
   codegen::CodeGen,
-  qualify::{
-    ImportQualifier,
-    TypedGlobalDecls,
-  },
+  qualify::{ImportQualifier, TypedGlobalDecls},
   typecheck::TypeChecker,
 };
 

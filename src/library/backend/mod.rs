@@ -2,10 +2,7 @@ mod compiler;
 mod interpreter;
 mod jit_executor;
 
-use std::{
-  error::Error,
-  mem::transmute,
-};
+use std::{error::Error, mem::transmute};
 
 pub use compiler::Compiler;
 use inkwell::OptimizationLevel;

@@ -2,34 +2,15 @@ mod utils;
 
 use std::error::Error;
 
-use inkwell::{
-  context::Context,
-  module::Module,
-};
+use inkwell::{context::Context, module::Module};
 
 use crate::library::{
-  ast::{
-    qualified,
-    typed,
-    untyped,
-  },
-  backend::{
-    Backend,
-    Compiler,
-    JITExecutor,
-  },
-  cli::{
-    Args,
-    DumpMode,
-    RunMode,
-  },
+  ast::{qualified, typed, untyped},
+  backend::{Backend, Compiler, JITExecutor},
+  cli::{Args, DumpMode, RunMode},
   codegen::CodeGen,
   parser::parse,
-  qualify::{
-    GlobalDeclCollector,
-    GlobalDeclTypechecker,
-    ImportQualifier,
-  },
+  qualify::{GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier},
   typecheck::TypeChecker,
 };
 

@@ -1,19 +1,11 @@
 mod sorter;
 
-use std::{
-  collections::HashMap,
-  error::Error,
-};
+use std::{collections::HashMap, error::Error};
 
 use crate::library::{
-  ast::{
-    typed,
-    untyped,
-    SimpleType,
-  },
+  ast::{typed, untyped, SimpleType},
   qualify::{
-    global_decl_typechecker::sorter::Sorter,
-    TypedGlobalDecls,
+    global_decl_typechecker::sorter::Sorter, TypedGlobalDecls,
     UntypedGlobalDecls,
   },
 };

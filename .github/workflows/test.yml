@@ -10,13 +10,35 @@ jobs:
     name: Rust project
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: KyleMayes/install-llvm-action@v1
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+            ~/.cache/pre-commit
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup VM packages
+        run: sudo apt-get install libncurses5
+
+      - name: Setup LLVM
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: "11.0"
-      - uses: actions/setup-python@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v3
+
       - name: Run linters and check
         uses: pre-commit/action@v3.0.0
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:

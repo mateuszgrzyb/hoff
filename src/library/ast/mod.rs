@@ -170,10 +170,7 @@ impl Imports {
 }
 
 pub mod untyped {
-  pub use super::{
-    Lit,
-    Op,
-  };
+  pub use super::{Lit, Op};
   use crate::library::qualify::Nameable;
 
   pub type Expr = super::Expr<String, (), ()>;
@@ -208,15 +205,8 @@ pub mod untyped {
 }
 
 pub mod qualified {
-  pub use super::{
-    Imports,
-    Lit,
-    Op,
-  };
-  use crate::library::{
-    ast::SimpleType,
-    qualify::Nameable,
-  };
+  pub use super::{Imports, Lit, Op};
+  use crate::library::{ast::SimpleType, qualify::Nameable};
 
   pub type Expr = super::Expr<String, (), ()>;
   pub type Fun = super::Fun<String, (), ()>;
@@ -249,13 +239,7 @@ pub mod qualified {
 }
 
 pub mod typed {
-  pub use super::{
-    Closure,
-    Imports,
-    Lit,
-    Op,
-    SimpleType,
-  };
+  pub use super::{Closure, Imports, Lit, Op, SimpleType};
   use crate::library::qualify::Nameable;
 
   pub type Expr = super::Expr<SimpleType, Closure, Struct>;

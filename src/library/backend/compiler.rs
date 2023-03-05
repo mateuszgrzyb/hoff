@@ -1,8 +1,5 @@
 use std::{
-  collections::HashMap,
-  error::Error,
-  fs::remove_file,
-  path::Path,
+  collections::HashMap, error::Error, fs::remove_file, path::Path,
   process::Command,
 };
 
@@ -10,12 +7,7 @@ use current_platform::CURRENT_PLATFORM;
 use inkwell::{
   module::Module,
   targets::{
-    CodeModel,
-    FileType,
-    InitializationConfig,
-    RelocMode,
-    Target,
-    TargetTriple,
+    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple,
   },
   OptimizationLevel,
 };

@@ -4,11 +4,7 @@ use std::error::Error;
 
 use clap::Parser;
 
-use crate::{
-  compile::Compile,
-  library::cli::Args,
-  repl::REPL,
-};
+use crate::{compile::Compile, library::cli::Args, repl::REPL};
 
 mod compile;
 mod library;

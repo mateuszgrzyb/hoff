@@ -1,18 +1,11 @@
 use std::{
-  fs::{
-    read_dir,
-    read_to_string,
-    DirEntry,
-  },
+  fs::{read_dir, read_to_string, DirEntry},
   path::PathBuf,
   process::Command,
 };
 
 use rstest::*;
-use similar::{
-  ChangeTag,
-  TextDiff,
-};
+use similar::{ChangeTag, TextDiff};
 
 #[fixture]
 fn command() -> Command {

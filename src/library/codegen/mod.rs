@@ -7,43 +7,16 @@ use inkwell::{
   builder::Builder,
   context::Context,
   module::Module,
-  types::{
-    BasicMetadataTypeEnum,
-    BasicType,
-    BasicTypeEnum,
-    StructType,
-  },
+  types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType},
   values::{
-    BasicMetadataValueEnum,
-    BasicValue,
-    BasicValueEnum,
-    FunctionValue,
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue,
   },
-  AddressSpace,
-  FloatPredicate,
-  IntPredicate,
+  AddressSpace, FloatPredicate, IntPredicate,
 };
-use FloatPredicate::{
-  OEQ,
-  OGE,
-  OGT,
-  OLE,
-  OLT,
-  ONE,
-};
-use IntPredicate::{
-  EQ,
-  NE,
-  SGE,
-  SGT,
-  SLE,
-  SLT,
-};
+use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
+use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
-use crate::library::{
-  ast::typed::*,
-  codegen::types::Types,
-};
+use crate::library::{ast::typed::*, codegen::types::Types};
 
 pub struct CodeGen<'ctx> {
   context: &'ctx Context,

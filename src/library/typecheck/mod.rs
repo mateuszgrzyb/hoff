@@ -1,10 +1,7 @@
 mod closure_manager;
 mod namespace;
 
-use std::{
-  collections::HashMap,
-  error::Error,
-};
+use std::{collections::HashMap, error::Error};
 
 use closure_manager::ClosureManager;
 use namespace::Namespace;
@@ -12,17 +9,7 @@ use regex::Captures;
 
 use crate::library::{
   ast::{
-    qualified,
-    typed,
-    Decl,
-    Expr,
-    Fun,
-    Lit,
-    Mod,
-    Op,
-    SimpleType,
-    Struct,
-    Type,
+    qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
     Val,
   },
   utils::STRING_TEMPLATE_RE,

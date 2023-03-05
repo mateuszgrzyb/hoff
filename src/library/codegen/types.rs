@@ -1,8 +1,4 @@
-use inkwell::types::{
-  FloatType,
-  IntType,
-  PointerType,
-};
+use inkwell::types::{FloatType, IntType, PointerType};
 
 #[derive(Debug)]
 pub struct Types<'ctx> {

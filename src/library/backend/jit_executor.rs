@@ -1,9 +1,6 @@
 use std::error::Error;
 
-use inkwell::{
-  execution_engine::ExecutionEngine,
-  module::Module,
-};
+use inkwell::{execution_engine::ExecutionEngine, module::Module};
 
 use super::Backend;
 use crate::library::backend::get_opt_level;

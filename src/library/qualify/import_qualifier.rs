@@ -3,14 +3,8 @@ use std::error::Error;
 use crate::library::{
   ast::{
     qualified,
-    typed::{
-      FunDecl,
-      Struct,
-      ValDecl,
-    },
-    untyped,
-    Decl,
-    Mod,
+    typed::{FunDecl, Struct, ValDecl},
+    untyped, Decl, Mod,
   },
   qualify::TypedGlobalDecls,
 };

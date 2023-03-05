@@ -1,12 +1,6 @@
-use std::{
-  collections::HashMap,
-  error::Error,
-};
+use std::{collections::HashMap, error::Error};
 
-use crate::library::{
-  ast::untyped,
-  qualify::Nameable,
-};
+use crate::library::{ast::untyped, qualify::Nameable};
 
 #[derive(Clone)]
 pub enum Mark {

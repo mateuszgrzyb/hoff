@@ -1,18 +1,12 @@
 use std::{
   error::Error,
-  io::{
-    stdin,
-    stdout,
-    Write,
-  },
+  io::{stdin, stdout, Write},
 };
 
 use inkwell::context::Context;
 
 use crate::library::{
-  backend::Interpreter,
-  cli::Args,
-  parser::parse_repl,
+  backend::Interpreter, cli::Args, parser::parse_repl,
   qualify::TypedGlobalDecls,
 };
 

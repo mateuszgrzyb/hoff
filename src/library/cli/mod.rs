@@ -1,8 +1,4 @@
-use clap::{
-  arg,
-  Parser,
-  ValueEnum,
-};
+use clap::{arg, Parser, ValueEnum};
 
 #[derive(ValueEnum, Clone, Debug)]
 #[value(rename_all = "lower")]

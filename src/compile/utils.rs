@@ -1,16 +1,9 @@
-use std::{
-  error::Error,
-  fmt::Debug,
-  fs::write,
-};
+use std::{error::Error, fmt::Debug, fs::write};
 
 use inkwell::context::Context;
 
 use crate::library::{
-  cli::{
-    Args,
-    DumpTarget,
-  },
+  cli::{Args, DumpTarget},
   codegen::CodeGen,
   qualify::Nameable,
 };

@@ -1,7 +1,4 @@
-pub use hoff::{
-  decls as parse,
-  repl as parse_repl,
-};
+pub use hoff::{decls as parse, repl as parse_repl};
 use peg::*;
 
 use crate::library::ast::untyped::*;
