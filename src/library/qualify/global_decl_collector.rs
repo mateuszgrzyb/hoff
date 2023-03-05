@@ -19,19 +19,12 @@ impl GlobalDeclCollector {
   }
 
   pub fn collect(&mut self, ms: &Vec<Mod>) -> UntypedGlobalDecls {
-    ms.into_iter()
-      .for_each(|m| self.process_mod(m));
+    ms.into_iter().for_each(|m| self.process_mod(m));
 
     UntypedGlobalDecls {
-      fundecls: self
-        .fundecls
-        .clone(),
-      structs: self
-        .structs
-        .clone(),
-      vals: self
-        .vals
-        .clone(),
+      fundecls: self.fundecls.clone(),
+      structs: self.structs.clone(),
+      vals: self.vals.clone(),
     }
   }
 
@@ -45,39 +38,20 @@ impl GlobalDeclCollector {
     match d {
       Decl::Fun(f) => {
         let fundecl = FunDecl {
-          name: f
-            .name
-            .clone(),
-          args: f
-            .args
-            .clone(),
-          rt: f
-            .rt
-            .clone(),
+          name: f.name.clone(),
+          args: f.args.clone(),
+          rt: f.rt.clone(),
         };
-        self
-          .fundecls
-          .push(fundecl)
+        self.fundecls.push(fundecl)
       }
-      Decl::Struct(s) => self
-        .structs
-        .push(s.clone()),
+      Decl::Struct(s) => self.structs.push(s.clone()),
       Decl::Val(v) => {
         let valdecl = ValDecl {
-          name: v
-            .name
-            .clone(),
-          t: v
-            .t
-            .clone(),
-          inner_vals: self.get_inner_vals(
-            v.expr
-              .clone(),
-          ),
+          name: v.name.clone(),
+          t: v.t.clone(),
+          inner_vals: self.get_inner_vals(v.expr.clone()),
         };
-        self
-          .vals
-          .push(valdecl)
+        self.vals.push(valdecl)
       }
       Decl::Import(_) => {}
     }

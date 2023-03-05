@@ -1,18 +1,31 @@
 pub use hoff::{
-  decl as parse_decl,
   decls as parse,
-  expr as parse_expr,
+  repl as parse_repl,
 };
 use peg::*;
 
 use crate::library::ast::untyped::*;
 
-fn create_binop(lh: Expr, op: Op, rh: Expr) -> Expr {
+fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
   Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
 }
 
 parser! {
   grammar hoff() for str {
+
+    // REPL
+
+    pub rule repl() -> Repl
+      = repl_decl() / repl_expr()
+
+    pub rule repl_decl() -> Repl
+      = d:decl() { Repl::Decl(d) }
+
+    pub rule repl_expr() -> Repl
+      = e:expr() { Repl::Expr(e) }
+
+    // Compile
+
     pub rule decls() -> Vec<Decl>
       = __ ds:(decl() ** __) __ { ds }
 
@@ -21,7 +34,7 @@ parser! {
 
     pub rule val() -> Decl
       = "val" _ tid:typedid() __ "=" __ e:expr() {
-        Decl::Val(Val{ name: tid.0, t: tid.1, expr: e})
+        Decl::Val(Val{ name: tid.0, t: tid.1, expr: e })
       }
 
     pub rule _fun() -> Fun
@@ -42,28 +55,29 @@ parser! {
         Decl::Import((q, n))
       }
 
+    // Expr
+
     pub rule expr() -> Expr
       = precedence!{
-
         x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(x), Box::new(y)) }
         --
         i:id() __ "->" __ a:id() { Expr::Attr(i, (), a) }
         --
-        x:(@)  __ "&&" __ y:@ { create_binop(x, Op::And, y) }
-        x:(@)  __ "||" __ y:@ { create_binop(x, Op::Or, y) }
+        x:(@)  __ "&&" __ y:@ { binop(x, Op::And, y) }
+        x:(@)  __ "||" __ y:@ { binop(x, Op::Or, y) }
         --
-        x:(@)  __ "<"  __ y:@ { create_binop(x, Op::Lt, y) }
-        x:(@)  __ "<=" __ y:@ { create_binop(x, Op::Le, y) }
-        x:(@)  __ "!=" __ y:@ { create_binop(x, Op::Ne, y) }
-        x:(@)  __ "==" __ y:@ { create_binop(x, Op::Eq, y) }
-        x:(@)  __ ">=" __ y:@ { create_binop(x, Op::Ge, y) }
-        x:(@)  __ ">"  __ y:@ { create_binop(x, Op::Gt, y) }
+        x:(@)  __ "<"  __ y:@ { binop(x, Op::Lt, y) }
+        x:(@)  __ "<=" __ y:@ { binop(x, Op::Le, y) }
+        x:(@)  __ "!=" __ y:@ { binop(x, Op::Ne, y) }
+        x:(@)  __ "==" __ y:@ { binop(x, Op::Eq, y) }
+        x:(@)  __ ">=" __ y:@ { binop(x, Op::Ge, y) }
+        x:(@)  __ ">"  __ y:@ { binop(x, Op::Gt, y) }
         --
-        x:(@)  __ "+"  __ y:@ { create_binop(x, Op::Add, y) }
-        x:(@)  __ "-"  __ y:@ { create_binop(x, Op::Sub, y) }
+        x:(@)  __ "+"  __ y:@ { binop(x, Op::Add, y) }
+        x:(@)  __ "-"  __ y:@ { binop(x, Op::Sub, y) }
         --
-        x:(@)  __ "*"  __ y:@ { create_binop(x, Op::Mul, y) }
-        x:(@)  __ "/"  __ y:@ { create_binop(x, Op::Div, y) }
+        x:(@)  __ "*"  __ y:@ { binop(x, Op::Mul, y) }
+        x:(@)  __ "/"  __ y:@ { binop(x, Op::Div, y) }
         --
         i:if_()      { i }
         c:call()     { c }
@@ -85,7 +99,7 @@ parser! {
     // Lit
 
     pub rule lit() -> Expr
-      = l:(lit_int() / lit_float() / lit_bool() / lit_string()) { Expr::Lit(l) }
+      = l:(lit_float() / lit_int() / lit_bool() / lit_string()) { Expr::Lit(l) }
 
     pub rule lit_int() -> Lit
       = n:numeric() { Lit::Int(n) }
@@ -144,7 +158,9 @@ parser! {
     pub rule type_() -> Type
       = t:tid() { Type::Simple(t) }
 
+    #[cache]
     rule _ = quiet!{[' ' | '\n' | '\t']+}
+    #[cache]
     rule __ = quiet!{[' ' | '\n' | '\t']*}
 
     pub rule numeric() -> i32
@@ -156,6 +172,7 @@ parser! {
     pub rule str() -> String
       = s:$(['"'][^ '"']*['"']) { s[1..s.len()-1].to_string() }
 
+    #[cache]
     pub rule digit()
       = ['0'..='9']
 
@@ -186,24 +203,43 @@ mod test {
   use crate::library::ast::untyped::*;
 
   #[rstest]
+  #[case::int("1", Lit::Int(1))]
+  #[case::float("33.0", Lit::Float("33.0".into()))]
+  #[case::bool_t("true", Lit::Bool(true))]
+  #[case::bool_f("false", Lit::Bool(false))]
+  #[case::string("\"ala\"", Lit::String("ala".into()))]
+  fn test_lit(#[case] lit_text: &str, #[case] exp_lit: Lit) {
+    // given
+    let exp_lit_expr = Expr::Lit(exp_lit);
+
+    // when
+    let lit_expr = hoff::lit(lit_text).unwrap();
+
+    // then
+    assert_eq!(lit_expr, exp_lit_expr);
+  }
+
+  #[rstest]
   #[case::add("a + b", ("a", Op::Add, "b"))]
   #[case::add("a - b", ("a", Op::Sub, "b"))]
   #[case::add("a * b", ("a", Op::Mul, "b"))]
   #[case::add("a / b", ("a", Op::Div, "b"))]
-  fn test_parse_binop(
+  fn test_binop(
     #[case] binop_text: &str,
     #[case] exp_binop_args: (&str, Op, &str),
   ) {
+    // given
+    let (lh, op, rh) = exp_binop_args;
+    let exp_binop_ast = Expr::BinOp(
+      Box::new(Expr::Value(lh.into())),
+      op,
+      Box::new(Expr::Value(rh.into())),
+    );
+
     // when
     let binop_ast = hoff::expr(binop_text).unwrap();
 
     // then
-    let (lh, op, rh) = exp_binop_args;
-    let exp_binop_ast = Expr::BinOp(
-      Box::new(Expr::Value(lh.to_string())),
-      op,
-      Box::new(Expr::Value(rh.to_string())),
-    );
     assert_eq!(binop_ast, exp_binop_ast)
   }
 
@@ -211,13 +247,13 @@ mod test {
   #[case::add_mul(
     "a + b * c",
     Expr::BinOp(
-      Box::new(Expr::Value("a".to_string())),
+      Box::new(Expr::Value("a".into())),
       Op::Add,
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
           Op::Mul,
-          Box::new(Expr::Value("c".to_string())),
+          Box::new(Expr::Value("c".into())),
         ),
       ),
     ),
@@ -227,25 +263,25 @@ mod test {
     Expr::BinOp(
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
           Op::Mul,
-          Box::new(Expr::Value("c".to_string())),
+          Box::new(Expr::Value("c".into())),
         )
       ),
       Op::Add,
-      Box::new(Expr::Value("a".to_string())),
+      Box::new(Expr::Value("a".into())),
     ),
   )]
   #[case::sub_div(
     "a - b / c",
     Expr::BinOp(
-      Box::new(Expr::Value("a".to_string())),
+      Box::new(Expr::Value("a".into())),
       Op::Sub,
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
           Op::Div,
-          Box::new(Expr::Value("c".to_string())),
+          Box::new(Expr::Value("c".into())),
         ),
       ),
     ),
@@ -255,13 +291,13 @@ mod test {
     Expr::BinOp(
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("a".to_string())),
+          Box::new(Expr::Value("a".into())),
           Op::Div,
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
         )
       ),
       Op::Sub,
-      Box::new(Expr::Value("c".to_string())),
+      Box::new(Expr::Value("c".into())),
     ),
   )]
   #[case::_sub__mul(
@@ -269,25 +305,25 @@ mod test {
     Expr::BinOp(
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("a".to_string())),
+          Box::new(Expr::Value("a".into())),
           Op::Sub,
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
         ),
       ),
       Op::Mul,
-      Box::new(Expr::Value("c".to_string())),
+      Box::new(Expr::Value("c".into())),
     ),
   )]
   #[case::mul__sub_(
     "c * (a - b)",
     Expr::BinOp(
-      Box::new(Expr::Value("c".to_string())),
+      Box::new(Expr::Value("c".into())),
       Op::Mul,
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("a".to_string())),
+          Box::new(Expr::Value("a".into())),
           Op::Sub,
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
         ),
       ),
     ),
@@ -295,13 +331,13 @@ mod test {
   #[case::div__add_(
     "a / (b + c)",
     Expr::BinOp(
-      Box::new(Expr::Value("a".to_string())),
+      Box::new(Expr::Value("a".into())),
       Op::Div,
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
           Op::Add,
-          Box::new(Expr::Value("c".to_string())),
+          Box::new(Expr::Value("c".into())),
         ),
       ),
     ),
@@ -311,19 +347,16 @@ mod test {
     Expr::BinOp(
       Box::new(
         Expr::BinOp(
-          Box::new(Expr::Value("b".to_string())),
+          Box::new(Expr::Value("b".into())),
           Op::Add,
-          Box::new(Expr::Value("c".to_string())),
+          Box::new(Expr::Value("c".into())),
         ),
       ),
       Op::Div,
-      Box::new(Expr::Value("a".to_string())),
+      Box::new(Expr::Value("a".into())),
     ),
   )]
-  fn test_parse_binop_adv(
-    #[case] binop_text: &str,
-    #[case] exp_binop_ast: Expr,
-  ) {
+  fn test_binop_adv(#[case] binop_text: &str, #[case] exp_binop_ast: Expr) {
     // when
     let binop_ast = hoff::expr(binop_text).unwrap();
 
@@ -336,7 +369,7 @@ mod test {
     "val i: Int = 1; 2",
     Expr::Chain(
       Box::new(Expr::Assign(
-        ("i".to_string(), Type::Simple("Int".to_string())),
+        ("i".into(), Type::Simple("Int".into())),
         Box::new(Expr::Lit(Lit::Int(1))),
       )),
       Box::new(
@@ -344,7 +377,7 @@ mod test {
       )
     )
   )]
-  fn test_parse_chain(#[case] chain_text: &str, #[case] exp_chain_ast: Expr) {
+  fn test_chain(#[case] chain_text: &str, #[case] exp_chain_ast: Expr) {
     // when
     let chain_ast = hoff::expr(chain_text).unwrap();
 
@@ -353,17 +386,17 @@ mod test {
   }
 
   #[rstest]
-  fn test_parse_fun() {
+  fn test_fun() {
     // given
     let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
     let exp_fn_ast = Decl::Fun(Fun {
-      name: "name".to_string(),
+      name: "name".into(),
       args: Vec::from([
-        ("a".to_string(), Type::Simple("Int".to_string())),
-        ("b".to_string(), Type::Simple("Int".to_string())),
-        ("c".to_string(), Type::Simple("Int".to_string())),
+        ("a".into(), Type::Simple("Int".into())),
+        ("b".into(), Type::Simple("Int".into())),
+        ("c".into(), Type::Simple("Int".into())),
       ]),
-      rt: Type::Simple("Int".to_string()),
+      rt: Type::Simple("Int".into()),
       body: (Expr::Lit(Lit::Int(33))),
     });
 
@@ -375,7 +408,7 @@ mod test {
   }
 
   #[rstest]
-  fn test_parse() {
+  fn test() {
     // given
     let text = r#"
 
@@ -390,39 +423,39 @@ mod test {
         "#;
     let exp_ast = Vec::from([
       Decl::Fun(Fun {
-        name: "f".to_string(),
-        args: Vec::from([("a".to_string(), Type::Simple("Int".to_string()))]),
-        rt: Type::Simple("Int".to_string()),
+        name: "f".into(),
+        args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
+        rt: Type::Simple("Int".into()),
         body: (Expr::Lit(Lit::Int(1))),
       }),
       Decl::Fun(Fun {
-        name: "g".to_string(),
+        name: "g".into(),
         args: Vec::from([
-          ("b".to_string(), Type::Simple("Int".to_string())),
-          ("c".to_string(), Type::Simple("Int".to_string())),
+          ("b".into(), Type::Simple("Int".into())),
+          ("c".into(), Type::Simple("Int".into())),
         ]),
-        rt: Type::Simple("Int".to_string()),
+        rt: Type::Simple("Int".into()),
         body: (Expr::Lit(Lit::Int(2))),
       }),
       Decl::Fun(Fun {
-        name: "h".to_string(),
+        name: "h".into(),
         args: Vec::from([
-          ("d".to_string(), Type::Simple("Int".to_string())),
-          ("e".to_string(), Type::Simple("Int".to_string())),
-          ("f".to_string(), Type::Simple("Int".to_string())),
+          ("d".into(), Type::Simple("Int".into())),
+          ("e".into(), Type::Simple("Int".into())),
+          ("f".into(), Type::Simple("Int".into())),
         ]),
-        rt: Type::Simple("Int".to_string()),
+        rt: Type::Simple("Int".into()),
         body: (Expr::Lit(Lit::Int(3))),
       }),
       Decl::Fun(Fun {
-        name: "i".to_string(),
+        name: "i".into(),
         args: Vec::from([
-          ("a".to_string(), Type::Simple("Int".to_string())),
-          ("b".to_string(), Type::Simple("Int".to_string())),
-          ("c".to_string(), Type::Simple("Int".to_string())),
+          ("a".into(), Type::Simple("Int".into())),
+          ("b".into(), Type::Simple("Int".into())),
+          ("c".into(), Type::Simple("Int".into())),
         ]),
-        rt: Type::Simple("Int".to_string()),
-        body: (Expr::Value("a".to_string())),
+        rt: Type::Simple("Int".into()),
+        body: (Expr::Value("a".into())),
       }),
     ]);
 

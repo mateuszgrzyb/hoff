@@ -68,9 +68,7 @@ impl<'ctx> CodeGen<'ctx> {
       int: context.i32_type(),
       float: context.f32_type(),
       bool: context.bool_type(),
-      string: context
-        .i8_type()
-        .ptr_type(AddressSpace::default()),
+      string: context.i8_type().ptr_type(AddressSpace::default()),
     };
 
     let functions = if add_stdlib {
@@ -101,36 +99,26 @@ impl<'ctx> CodeGen<'ctx> {
     [
       (
         "puts",
-        context
-          .i32_type()
-          .fn_type(
-            &[BasicMetadataTypeEnum::from(
-              context
-                .i8_type()
-                .ptr_type(AddressSpace::default()),
-            )],
-            false,
-          ),
+        context.i32_type().fn_type(
+          &[BasicMetadataTypeEnum::from(
+            context.i8_type().ptr_type(AddressSpace::default()),
+          )],
+          false,
+        ),
       ),
       (
         "sprintf",
-        context
-          .i32_type()
-          .fn_type(
-            &[
-              BasicMetadataTypeEnum::from(
-                context
-                  .i8_type()
-                  .ptr_type(AddressSpace::default()),
-              ),
-              BasicMetadataTypeEnum::from(
-                context
-                  .i8_type()
-                  .ptr_type(AddressSpace::default()),
-              ),
-            ],
-            true,
-          ),
+        context.i32_type().fn_type(
+          &[
+            BasicMetadataTypeEnum::from(
+              context.i8_type().ptr_type(AddressSpace::default()),
+            ),
+            BasicMetadataTypeEnum::from(
+              context.i8_type().ptr_type(AddressSpace::default()),
+            ),
+          ],
+          true,
+        ),
       ),
     ]
     .into_iter()
@@ -143,35 +131,17 @@ impl<'ctx> CodeGen<'ctx> {
 
   fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
     match t {
-      Type::Simple(SimpleType::Int) => self
-        .types
-        .int
-        .into(),
-      Type::Simple(SimpleType::Bool) => self
-        .types
-        .bool
-        .into(),
-      Type::Simple(SimpleType::Float) => self
-        .types
-        .float
-        .into(),
-      Type::Simple(SimpleType::String) => self
-        .types
-        .string
-        .into(),
+      Type::Simple(SimpleType::Int) => self.types.int.into(),
+      Type::Simple(SimpleType::Bool) => self.types.bool.into(),
+      Type::Simple(SimpleType::Float) => self.types.float.into(),
+      Type::Simple(SimpleType::String) => self.types.string.into(),
       Type::Function(ts) => {
         let mut args = ts.clone();
-        let rt = args
-          .pop()
-          .unwrap();
+        let rt = args.pop().unwrap();
         let rt = self.get_type(&rt);
         let args = args
           .into_iter()
-          .map(|a| {
-            self
-              .get_type(&a)
-              .into()
-          })
+          .map(|a| self.get_type(&a).into())
           .collect::<Vec<BasicMetadataTypeEnum>>();
         let ft = match rt {
           BasicTypeEnum::ArrayType(at) => at.fn_type(&args[..], false),
@@ -182,15 +152,11 @@ impl<'ctx> CodeGen<'ctx> {
           BasicTypeEnum::VectorType(vt) => vt.fn_type(&args[..], false),
         };
 
-        ft.ptr_type(AddressSpace::default())
-          .into()
+        ft.ptr_type(AddressSpace::default()).into()
       }
       Type::Simple(SimpleType::Struct(s)) => self
         .structs
-        .get(
-          s.name
-            .as_str(),
-        )
+        .get(s.name.as_str())
         .unwrap()
         .1
         .ptr_type(AddressSpace::default())
@@ -199,45 +165,24 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   pub fn compile_module(&mut self, m: Mod) {
-    for s in m
-      .imports
-      .structs
-    {
+    for s in m.imports.structs {
       self.compile_struct(s)
     }
 
-    for fd in m
-      .imports
-      .fundecls
-    {
+    for fd in m.imports.fundecls {
       self.compile_import_fun(fd)
     }
 
-    for v in m
-      .imports
-      .vals
-    {
+    for v in m.imports.vals {
       self.compile_import_val(v)
     }
 
-    self
-      .module
-      .set_name(
-        m.name
-          .as_str(),
-      );
-    let mut module_name = m
-      .name
-      .clone();
+    self.module.set_name(m.name.as_str());
+    let mut module_name = m.name.clone();
     module_name.push_str(".ir");
-    self
-      .module
-      .set_source_file_name(module_name.as_str());
+    self.module.set_source_file_name(module_name.as_str());
 
-    for d in m
-      .decls
-      .into_iter()
-    {
+    for d in m.decls.into_iter() {
       self.compile_decl(d);
     }
   }
@@ -266,29 +211,15 @@ impl<'ctx> CodeGen<'ctx> {
             .map(|(n, t)| (n, self.get_type(&t).into()))
             .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
 
-    let fn_type = self
-      .get_type(&f.rt)
-      .fn_type(&arg_types[..], false);
+    let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
 
-    let function = self
-      .module
-      .add_function(
-        f.name
-          .as_str(),
-        fn_type,
-        None,
-      );
+    let function = self.module.add_function(f.name.as_str(), fn_type, None);
 
-    for (n, p) in arg_names
-      .into_iter()
-      .zip(function.get_param_iter())
-    {
+    for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
       p.set_name(n.as_str());
     }
 
-    self
-      .functions
-      .insert(f.name, function);
+    self.functions.insert(f.name, function);
   }
 
   fn compile_fun(
@@ -305,85 +236,45 @@ impl<'ctx> CodeGen<'ctx> {
             .map(|(n, t)| (n, self.get_type(&t).into()))
             .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
 
-    let fn_type = self
-      .get_type(&f.rt)
-      .fn_type(&arg_types[..], false);
+    let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
 
     // create function value
 
-    let function = self
-      .module
-      .add_function(
-        f.name
-          .as_str(),
-        fn_type,
-        None,
-      );
+    let function = self.module.add_function(f.name.as_str(), fn_type, None);
 
     // add names to parameters
 
-    let basic_block = self
-      .context
-      .append_basic_block(function, "entry");
-    let parent_basic_block = self
-      .parent_basic_block
-      .clone();
-    self
-      .builder
-      .position_at_end(basic_block);
+    let basic_block = self.context.append_basic_block(function, "entry");
+    let parent_basic_block = self.parent_basic_block.clone();
+    self.builder.position_at_end(basic_block);
 
-    for (n, p) in arg_names
-      .into_iter()
-      .zip(function.get_param_iter())
-    {
+    for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
       p.set_name(n.as_str());
-      if closure
-        .clone()
-        .into_iter()
-        .any(|(n1, _)| &n1 == n)
-      {
-        self
-          .closure
-          .insert(n.clone(), p);
+      if closure.clone().into_iter().any(|(n1, _)| &n1 == n) {
+        self.closure.insert(n.clone(), p);
       } else {
-        self
-          .values
-          .insert(n.clone(), p);
+        self.values.insert(n.clone(), p);
       }
     }
 
     // register closure
 
-    self
-      .closures
-      .insert(
-        f.name
-          .clone(),
-        closure
-          .into_iter()
-          .map(|(n, _)| n)
-          .collect(),
-      );
+    self.closures.insert(
+      f.name.clone(),
+      closure.into_iter().map(|(n, _)| n).collect(),
+    );
 
     self.parent_basic_block = Some(basic_block);
 
-    self
-      .functions
-      .insert(f.name, function);
+    self.functions.insert(f.name, function);
     self.current_function = Some(function);
 
     let value = self.compile_expr(f.body);
 
-    self
-      .builder
-      .position_at_end(basic_block);
-    self
-      .builder
-      .build_return(Some(&value));
+    self.builder.position_at_end(basic_block);
+    self.builder.build_return(Some(&value));
     if let Some(pbb) = parent_basic_block {
-      self
-        .builder
-        .position_at_end(pbb)
+      self.builder.position_at_end(pbb)
     };
 
     function
@@ -393,9 +284,7 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_struct(&mut self, struct_: Struct) {
-    let name = struct_
-      .clone()
-      .name;
+    let name = struct_.clone().name;
     let args = struct_
       .clone()
       .args
@@ -403,14 +292,10 @@ impl<'ctx> CodeGen<'ctx> {
       .map(|(_, t)| self.get_type(&t))
       .collect::<Vec<BasicTypeEnum>>();
 
-    let s = self
-      .context
-      .opaque_struct_type(name.as_str());
+    let s = self.context.opaque_struct_type(name.as_str());
     s.set_body(&args[..], true);
 
-    self
-      .structs
-      .insert(name, (struct_.clone(), s));
+    self.structs.insert(name, (struct_.clone(), s));
   }
 
   fn compile_import_val(&mut self, value: ValDecl) {
@@ -456,21 +341,12 @@ impl<'ctx> CodeGen<'ctx> {
     let lh = self.compile_expr(lh);
     let rh = self.compile_expr(rh);
     match (lh.get_type(), op) {
-      (BasicTypeEnum::IntType(i), op)
-        if i
-          == self
-            .types
-            .bool =>
-      {
+      (BasicTypeEnum::IntType(i), op) if i == self.types.bool => {
         let lh = lh.into_int_value();
         let rh = rh.into_int_value();
         let result = match op {
-          Op::And => self
-            .builder
-            .build_and(lh, rh, "and"),
-          Op::Or => self
-            .builder
-            .build_or(lh, rh, "and"),
+          Op::And => self.builder.build_and(lh, rh, "and"),
+          Op::Or => self.builder.build_or(lh, rh, "and"),
           _ => panic!("Invalid state"),
         };
         result.as_basic_value_enum()
@@ -479,36 +355,16 @@ impl<'ctx> CodeGen<'ctx> {
         let lh = lh.into_int_value();
         let rh = rh.into_int_value();
         let result = match op {
-          Op::Add => self
-            .builder
-            .build_int_add(lh, rh, "add"),
-          Op::Sub => self
-            .builder
-            .build_int_sub(lh, rh, "sub"),
-          Op::Mul => self
-            .builder
-            .build_int_mul(lh, rh, "mul"),
-          Op::Div => self
-            .builder
-            .build_int_signed_div(lh, rh, "div"),
-          Op::Lt => self
-            .builder
-            .build_int_compare(SLT, lh, rh, "ilt"),
-          Op::Le => self
-            .builder
-            .build_int_compare(SLE, lh, rh, "ile"),
-          Op::Ne => self
-            .builder
-            .build_int_compare(NE, lh, rh, "ine"),
-          Op::Eq => self
-            .builder
-            .build_int_compare(EQ, lh, rh, "ieq"),
-          Op::Ge => self
-            .builder
-            .build_int_compare(SGE, lh, rh, "ige"),
-          Op::Gt => self
-            .builder
-            .build_int_compare(SGT, lh, rh, "igt"),
+          Op::Add => self.builder.build_int_add(lh, rh, "add"),
+          Op::Sub => self.builder.build_int_sub(lh, rh, "sub"),
+          Op::Mul => self.builder.build_int_mul(lh, rh, "mul"),
+          Op::Div => self.builder.build_int_signed_div(lh, rh, "div"),
+          Op::Lt => self.builder.build_int_compare(SLT, lh, rh, "ilt"),
+          Op::Le => self.builder.build_int_compare(SLE, lh, rh, "ile"),
+          Op::Ne => self.builder.build_int_compare(NE, lh, rh, "ine"),
+          Op::Eq => self.builder.build_int_compare(EQ, lh, rh, "ieq"),
+          Op::Ge => self.builder.build_int_compare(SGE, lh, rh, "ige"),
+          Op::Gt => self.builder.build_int_compare(SGT, lh, rh, "igt"),
           Op::And | Op::Or => panic!("Invalid state"),
         };
         result.as_basic_value_enum()
@@ -520,18 +376,10 @@ impl<'ctx> CodeGen<'ctx> {
         let lh = lh.into_float_value();
         let rh = rh.into_float_value();
         let result = match op {
-          Op::Add => self
-            .builder
-            .build_float_add(lh, rh, "fadd"),
-          Op::Sub => self
-            .builder
-            .build_float_sub(lh, rh, "fsub"),
-          Op::Mul => self
-            .builder
-            .build_float_mul(lh, rh, "fmul"),
-          Op::Div => self
-            .builder
-            .build_float_div(lh, rh, "fdiv"),
+          Op::Add => self.builder.build_float_add(lh, rh, "fadd"),
+          Op::Sub => self.builder.build_float_sub(lh, rh, "fsub"),
+          Op::Mul => self.builder.build_float_mul(lh, rh, "fmul"),
+          Op::Div => self.builder.build_float_div(lh, rh, "fdiv"),
           _ => panic!("Invalid state"),
         };
         result.as_basic_value_enum()
@@ -541,24 +389,12 @@ impl<'ctx> CodeGen<'ctx> {
         let lh = lh.into_float_value();
         let rh = rh.into_float_value();
         let result = match op {
-          Op::Lt => self
-            .builder
-            .build_float_compare(OLT, lh, rh, "flt"),
-          Op::Le => self
-            .builder
-            .build_float_compare(OLE, lh, rh, "fle"),
-          Op::Ne => self
-            .builder
-            .build_float_compare(ONE, lh, rh, "fne"),
-          Op::Eq => self
-            .builder
-            .build_float_compare(OEQ, lh, rh, "feq"),
-          Op::Ge => self
-            .builder
-            .build_float_compare(OGE, lh, rh, "fge"),
-          Op::Gt => self
-            .builder
-            .build_float_compare(OGT, lh, rh, "fgt"),
+          Op::Lt => self.builder.build_float_compare(OLT, lh, rh, "flt"),
+          Op::Le => self.builder.build_float_compare(OLE, lh, rh, "fle"),
+          Op::Ne => self.builder.build_float_compare(ONE, lh, rh, "fne"),
+          Op::Eq => self.builder.build_float_compare(OEQ, lh, rh, "feq"),
+          Op::Ge => self.builder.build_float_compare(OGE, lh, rh, "fge"),
+          Op::Gt => self.builder.build_float_compare(OGT, lh, rh, "fgt"),
           _ => panic!("Invalid state"),
         };
         result.as_basic_value_enum()
@@ -582,10 +418,7 @@ impl<'ctx> CodeGen<'ctx> {
       Lit::Float(f) => self
         .types
         .float
-        .const_float(
-          f.parse()
-            .unwrap(),
-        )
+        .const_float(f.parse().unwrap())
         .as_basic_value_enum(),
       Lit::String(s) => self
         .builder
@@ -595,24 +428,15 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_value(&self, name: String) -> Value<'ctx> {
-    if let Some(value) = self
-      .closure
-      .get(name.as_str())
-    {
+    if let Some(value) = self.closure.get(name.as_str()) {
       return value.clone();
     }
 
-    if let Some(value) = self
-      .values
-      .get(name.as_str())
-    {
+    if let Some(value) = self.values.get(name.as_str()) {
       return value.clone();
     }
 
-    if let Some(f) = self
-      .functions
-      .get(name.as_str())
-    {
+    if let Some(f) = self.functions.get(name.as_str()) {
       return self
         .builder
         .build_call(f.clone(), &[], "call")
@@ -631,9 +455,7 @@ impl<'ctx> CodeGen<'ctx> {
     val: Expr,
   ) -> Value<'ctx> {
     let val = self.compile_expr(val);
-    self
-      .values
-      .insert(name, val);
+    self.values.insert(name, val);
     val
   }
 
@@ -643,10 +465,7 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_call(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
-    let f = *self
-      .functions
-      .get(name.as_str())
-      .unwrap();
+    let f = *self.functions.get(name.as_str()).unwrap();
     let closure = self
       .closures
       .get(name.as_str())
@@ -655,22 +474,12 @@ impl<'ctx> CodeGen<'ctx> {
 
     let standard_args = args
       .into_iter()
-      .map(|a| {
-        self
-          .compile_expr(a)
-          .into()
-      })
+      .map(|a| self.compile_expr(a).into())
       .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
     let closure = closure
       .into_iter()
-      .map(|n| {
-        (*self
-          .values
-          .get(n.as_str())
-          .unwrap())
-        .into()
-      })
+      .map(|n| (*self.values.get(n.as_str()).unwrap()).into())
       .collect::<Vec<_>>();
 
     let args = standard_args
@@ -771,11 +580,7 @@ impl<'ctx> CodeGen<'ctx> {
     t: Struct,
     attr: String,
   ) -> Value<'ctx> {
-    let ptr = self
-      .values
-      .get(&*name)
-      .unwrap()
-      .into_pointer_value();
+    let ptr = self.values.get(&*name).unwrap().into_pointer_value();
 
     let (i, (_, t)) = t
       .args
@@ -792,19 +597,13 @@ impl<'ctx> CodeGen<'ctx> {
       Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
         attr_ptr.as_basic_value_enum()
       }
-      _ => self
-        .builder
-        .build_load(attr_ptr, "load"),
+      _ => self.builder.build_load(attr_ptr, "load"),
     }
   }
 
   fn compile_new(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
-    let structs = self
-      .structs
-      .clone();
-    let (_, struct_type) = structs
-      .get(name.as_str())
-      .unwrap();
+    let structs = self.structs.clone();
+    let (_, struct_type) = structs.get(name.as_str()).unwrap();
 
     let struct_args = args
       .into_iter()
@@ -813,14 +612,10 @@ impl<'ctx> CodeGen<'ctx> {
 
     let struct_value = struct_type.const_named_struct(&struct_args);
 
-    let struct_ptr = self
-      .builder
-      .build_malloc(*struct_type, "malloc")
-      .unwrap();
+    let struct_ptr =
+      self.builder.build_malloc(*struct_type, "malloc").unwrap();
 
-    self
-      .builder
-      .build_store(struct_ptr, struct_value);
+    self.builder.build_store(struct_ptr, struct_value);
 
     struct_ptr.as_basic_value_enum()
   }
@@ -832,11 +627,7 @@ impl<'ctx> CodeGen<'ctx> {
   ) -> Value<'ctx> {
     let mut values: Vec<BasicMetadataValueEnum<'ctx>> = values
       .into_iter()
-      .map(|value| {
-        self
-          .compile_value(value)
-          .into()
-      })
+      .map(|value| self.compile_value(value).into())
       .collect::<Vec<_>>();
 
     let template_value = self
@@ -849,18 +640,11 @@ impl<'ctx> CodeGen<'ctx> {
       .build_global_string_ptr("", "str_tmpl_rstl")
       .as_basic_value_enum();
 
-    let mut sprintf_args = Vec::from([
-      template_value_result
-        .clone()
-        .into(),
-      template_value.into(),
-    ]);
+    let mut sprintf_args =
+      Vec::from([template_value_result.clone().into(), template_value.into()]);
     sprintf_args.append(&mut values);
 
-    let sprintf = self
-      .functions
-      .get("sprintf")
-      .unwrap();
+    let sprintf = self.functions.get("sprintf").unwrap();
 
     self
       .builder
@@ -940,11 +724,6 @@ mod test {
     codegen.compile_module(m);
 
     // then
-    assert_eq!(
-      codegen
-        .module
-        .to_string(),
-      expected_module_str
-    );
+    assert_eq!(codegen.module.to_string(), expected_module_str);
   }
 }

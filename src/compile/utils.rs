@@ -36,22 +36,12 @@ pub fn dump_llvm<'ctx>(
   codegens: Vec<CodeGen<'ctx>>,
 ) -> Result<(), Box<dyn Error>> {
   for codegen in codegens {
-    let filename = codegen
-      .module
-      .get_source_file_name()
-      .to_str()?;
+    let filename = codegen.module.get_source_file_name().to_str()?;
 
     match args.dump_target {
-      DumpTarget::File => codegen
-        .module
-        .print_to_file(filename)?,
+      DumpTarget::File => codegen.module.print_to_file(filename)?,
       DumpTarget::StdOut => {
-        println!(
-          "{}",
-          codegen
-            .module
-            .to_string()
-        )
+        println!("{}", codegen.module.to_string())
       }
     }
   }

@@ -1,5 +1,5 @@
 max_width = 79
-chain_width = 0
+#chain_width = 0
 #fn_single_line = true
 #format_strings = true
 #hex_literal_case = "Lower"

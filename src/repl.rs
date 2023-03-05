@@ -10,67 +10,70 @@ use std::{
 use inkwell::context::Context;
 
 use crate::library::{
-  ast::untyped::Repl,
-  backend::REPL,
+  backend::Interpreter,
   cli::Args,
-  parser::{
-    parse_decl,
-    parse_expr,
-  },
+  parser::parse_repl,
   qualify::TypedGlobalDecls,
 };
 
-fn parse_repl_line(input: String) -> Result<Repl, Box<dyn Error>> {
-  if let Ok(decl) = parse_decl(&input) {
-    return Ok(Repl::Decl(decl));
-  }
-
-  if let Ok(expr) = parse_expr(&input) {
-    return Ok(Repl::Expr(expr));
-  }
-
-  return Err("Parse error".into());
+pub struct REPL {
+  args: Args,
+  context: Context,
+  global_decls: TypedGlobalDecls,
 }
 
-fn print_and_flush(text: &str) {
-  print!("{}", text);
-  stdout()
-    .flush()
-    .unwrap_or_else(|err| panic!("flush error: {}", err));
-}
+impl REPL {
+  pub fn create(args: Args) -> Self {
+    Self {
+      args,
+      context: Context::create(),
+      global_decls: TypedGlobalDecls::create(),
+    }
+  }
 
-pub fn repl(args: Args) -> ! {
-  let context = Context::create();
+  pub fn run_loop(&self) -> ! {
+    loop {
+      let Ok(input) = Self::read_input()
+        .map_err(|err| println!("Input error: {}", err))
+        else { continue };
 
-  let global_decls = TypedGlobalDecls::create();
+      let Ok(expr) = parse_repl(&input)
+        .map_err(|err| println!("Parse error: {}", err))
+        else { continue };
 
-  'repl: loop {
-    print_and_flush(">>>");
+      let mut interpreter =
+        Interpreter::create(&self.global_decls, &self.context, self.args.o);
+
+      let Ok(result) = interpreter.eval(expr)
+        .map_err(|err| println!("Eval error: {}", err))
+        else { continue };
+
+      println!("{}", result)
+    }
+  }
+
+  fn print_and_flush(text: &str) {
+    print!("{}", text);
+    stdout()
+      .flush()
+      .unwrap_or_else(|err| panic!("flush error: {}", err));
+  }
+
+  fn read_input() -> Result<String, Box<dyn Error>> {
+    Self::print_and_flush(">>>");
+
     let mut input = String::new();
+
     while !input.contains(";;") {
       if let Err(err) = stdin().read_line(&mut input) {
-        println!("Invalid input: {}", err);
-        continue 'repl;
+        return Err(err.into());
       }
-      print_and_flush("...");
+
+      Self::print_and_flush("...");
     }
 
-    let input = input
-      .split(";;")
-      .next()
-      .unwrap()
-      .to_string();
+    let input = input.split(";;").next().unwrap().to_string();
 
-    let Ok(expr) = parse_repl_line(input)
-            .map_err(|err| println!("Parse error: {}", err))
-        else { continue };
-
-    let mut repl = REPL::create(&global_decls, &context, args.o);
-
-    let Ok(result) = repl.eval(expr)
-            .map_err(|err| println!("Eval error: {}", err))
-        else { continue };
-
-    println!("{}", result)
+    Ok(input)
   }
 }

@@ -40,11 +40,7 @@ where
   let mut snd = Vec::new();
   let mut mismatched = Vec::new();
   for e in dir_entries {
-    let file_name = e
-      .unwrap()
-      .file_name()
-      .into_string()
-      .unwrap();
+    let file_name = e.unwrap().file_name().into_string().unwrap();
 
     let v = if match_fst(&file_name) {
       &mut fst
@@ -90,27 +86,18 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
     .into_iter()
     .map(|of| {
       read_to_string(of)
-        .map(|s| {
-          s.trim_end_matches("\n")
-            .to_string()
-        })
+        .map(|s| s.trim_end_matches("\n").to_string())
         .unwrap()
     })
     .collect::<Vec<_>>()
     .join("\n\n");
 
   // when
-  let output = cli
-    .args(input_files)
-    .output()
-    .unwrap();
+  let output = cli.args(input_files).output().unwrap();
 
   // then
   let stdout = String::from_utf8(output.stdout)
-    .map(|s| {
-      s.trim_end_matches("\n")
-        .to_string()
-    })
+    .map(|s| s.trim_end_matches("\n").to_string())
     .unwrap();
   let stderr = String::from_utf8(output.stderr).unwrap();
 

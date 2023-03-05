@@ -35,10 +35,7 @@ impl Sortable<untyped::Struct> for untyped::Struct {
   ) -> Vec<MarkedNode<untyped::Struct>> {
     let mut inner_structs = Vec::new();
 
-    for (_, arg_type) in self
-      .args
-      .clone()
-    {
+    for (_, arg_type) in self.args.clone() {
       let untyped::Type::Simple(struct_name) = arg_type else {
                 continue
             };
@@ -61,10 +58,7 @@ impl Sortable<untyped::ValDecl> for untyped::ValDecl {
   ) -> Vec<MarkedNode<untyped::ValDecl>> {
     let mut inner_vals = Vec::new();
 
-    for val_name in self
-      .inner_vals
-      .clone()
-    {
+    for val_name in self.inner_vals.clone() {
       let Some(node) = marks.get(val_name.as_str()) else {
                 continue
             };
@@ -103,9 +97,7 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
 
   pub fn sort(&mut self) -> Result<Vec<T>, Box<dyn Error>> {
     loop {
-      let marks = self
-        .marks
-        .clone();
+      let marks = self.marks.clone();
 
       let node = marks
         .values()
@@ -124,41 +116,31 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
       Mark::Perm => return Ok(()),
       Mark::Temp => return Err("cyclic reference found".into()),
       Mark::None => {
-        let elem = node
-          .elem
-          .clone();
+        let elem = node.elem.clone();
 
-        self
-          .marks
-          .insert(
-            elem.get_name(),
-            MarkedNode {
-              elem: elem.clone(),
-              mark: Mark::Temp,
-            },
-          );
+        self.marks.insert(
+          elem.get_name(),
+          MarkedNode {
+            elem: elem.clone(),
+            mark: Mark::Temp,
+          },
+        );
 
-        let marks = self
-          .marks
-          .clone();
+        let marks = self.marks.clone();
 
         for node in elem.get_inner(marks) {
           self.visit(&node)?
         }
 
-        self
-          .marks
-          .insert(
-            elem.get_name(),
-            MarkedNode {
-              elem: elem.clone(),
-              mark: Mark::Perm,
-            },
-          );
+        self.marks.insert(
+          elem.get_name(),
+          MarkedNode {
+            elem: elem.clone(),
+            mark: Mark::Perm,
+          },
+        );
 
-        self
-          .sorted
-          .push(elem)
+        self.sorted.push(elem)
       }
     };
 
@@ -200,23 +182,12 @@ mod test {
     let mut gs = Sorter::create(structs);
 
     // when
-    let sorted = gs
-      .sort()
-      .unwrap();
+    let sorted = gs.sort().unwrap();
 
     // then
-    let t1_pos = sorted
-      .iter()
-      .position(|s| s.name == t1.name)
-      .unwrap();
-    let t2_pos = sorted
-      .iter()
-      .position(|s| s.name == t2.name)
-      .unwrap();
-    let t3_pos = sorted
-      .iter()
-      .position(|s| s.name == t3.name)
-      .unwrap();
+    let t1_pos = sorted.iter().position(|s| s.name == t1.name).unwrap();
+    let t2_pos = sorted.iter().position(|s| s.name == t2.name).unwrap();
+    let t3_pos = sorted.iter().position(|s| s.name == t3.name).unwrap();
 
     assert!(t2_pos < t1_pos);
     assert!(t2_pos < t3_pos);

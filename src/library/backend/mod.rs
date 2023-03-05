@@ -1,6 +1,6 @@
 mod compiler;
 mod interpreter;
-mod repl;
+mod jit_executor;
 
 use std::{
   error::Error,
@@ -10,7 +10,7 @@ use std::{
 pub use compiler::Compiler;
 use inkwell::OptimizationLevel;
 pub use interpreter::Interpreter;
-pub use repl::REPL;
+pub use jit_executor::JITExecutor;
 
 pub trait Backend {
   fn run(&self) -> Result<(), Box<dyn Error>>;

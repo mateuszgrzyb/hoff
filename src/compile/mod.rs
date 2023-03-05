@@ -16,7 +16,7 @@ use crate::library::{
   backend::{
     Backend,
     Compiler,
-    Interpreter,
+    JITExecutor,
   },
   cli::{
     Args,
@@ -40,9 +40,7 @@ pub struct Compile {
 
 impl Compile {
   pub fn create(args: Args) -> Self {
-    let no_of_files = args
-      .files
-      .len();
+    let no_of_files = args.files.len();
     Self {
       args,
       contexts: utils::initialize_contexts(no_of_files),
@@ -52,25 +50,16 @@ impl Compile {
   pub fn compile(&self) -> Result<(), Box<dyn Error>> {
     let files = self.read_files()?;
 
-    let modules = self
-      .parse_files(files)?
-      .into_iter();
+    let modules = self.parse_files(files)?.into_iter();
 
-    if let DumpMode::Ast = self
-      .args
-      .dump_mode
-    {
+    if let DumpMode::Ast = self.args.dump_mode {
       return utils::dump(&self.args, modules);
     };
 
-    let qualified_modules = self
-      .qualify_modules(modules)
-      .map(Vec::into_iter)?;
+    let qualified_modules =
+      self.qualify_modules(modules).map(Vec::into_iter)?;
 
-    if let DumpMode::QualifiedAst = self
-      .args
-      .dump_mode
-    {
+    if let DumpMode::QualifiedAst = self.args.dump_mode {
       return utils::dump(&self.args, qualified_modules);
     };
 
@@ -78,49 +67,26 @@ impl Compile {
       .typecheck_modules(qualified_modules)
       .map(Vec::into_iter)?;
 
-    if let DumpMode::TypedAst = self
-      .args
-      .dump_mode
-    {
+    if let DumpMode::TypedAst = self.args.dump_mode {
       return utils::dump(&self.args, typed_modules);
     };
 
     let codegens = self.compile_modules(typed_modules);
 
-    if !self
-      .args
-      .no_verify_llvm
-    {
+    if !self.args.no_verify_llvm {
       self.verify_modules(&codegens)?
     }
 
-    if let DumpMode::LlvmIr = self
-      .args
-      .dump_mode
-    {
+    if let DumpMode::LlvmIr = self.args.dump_mode {
       return utils::dump_llvm(&self.args, codegens);
     }
 
     let m = self.link_modules(codegens)?;
+    let o = self.args.o;
 
-    match self
-      .args
-      .mode
-    {
-      RunMode::JIT => Interpreter::create(
-        m,
-        self
-          .args
-          .o,
-      )
-      .run()?,
-      RunMode::Compile => Compiler::create(
-        m,
-        self
-          .args
-          .o,
-      )
-      .run()?,
+    match self.args.mode {
+      RunMode::JIT => JITExecutor::create(m, o).run()?,
+      RunMode::Compile => Compiler::create(m, o).run()?,
     };
 
     Ok(())
@@ -214,8 +180,7 @@ impl Compile {
 
   fn verify_modules(&self, cgs: &Vec<CodeGen>) -> Result<(), Box<dyn Error>> {
     for c in cgs.iter() {
-      c.module
-        .verify()?
+      c.module.verify()?
     }
 
     Ok(())
@@ -229,8 +194,7 @@ impl Compile {
       .into_iter()
       .map(|codegen| codegen.module)
       .reduce(|m1, m2| {
-        m1.link_in_module(m2)
-          .unwrap();
+        m1.link_in_module(m2).unwrap();
         m1
       })
       .ok_or_else(|| "No files were compiled".into())

@@ -38,15 +38,9 @@ impl<'init> ImportQualifier<'init> {
     let name = m.name;
     let decls = self.qualify_decls(m.decls)?;
     let imports = qualified::Imports {
-      fundecls: self
-        .fundecls
-        .clone(),
-      structs: self
-        .structs
-        .clone(),
-      vals: self
-        .vals
-        .clone(),
+      fundecls: self.fundecls.clone(),
+      structs: self.structs.clone(),
+      vals: self.vals.clone(),
     };
 
     Ok(Mod {
@@ -71,18 +65,10 @@ impl<'init> ImportQualifier<'init> {
     d: untyped::Decl,
   ) -> QualifyResult<qualified::Decl> {
     match d {
-      Decl::Fun(f) => self
-        .qualify_fun(f)
-        .map(|f| Decl::Fun(f)),
-      Decl::Struct(s) => self
-        .qualify_struct(s)
-        .map(|s| Decl::Struct(s)),
-      Decl::Val(v) => self
-        .qualify_val(v)
-        .map(|v| Decl::Val(v)),
-      Decl::Import(i) => self
-        .qualify_import(i)
-        .map(|i| Decl::Import(i)),
+      Decl::Fun(f) => self.qualify_fun(f).map(|f| Decl::Fun(f)),
+      Decl::Struct(s) => self.qualify_struct(s).map(|s| Decl::Struct(s)),
+      Decl::Val(v) => self.qualify_val(v).map(|v| Decl::Val(v)),
+      Decl::Import(i) => self.qualify_import(i).map(|i| Decl::Import(i)),
     }
   }
 
@@ -114,9 +100,7 @@ impl<'init> ImportQualifier<'init> {
       .find(|s| s.name == name)
       .cloned()
     {
-      self
-        .structs
-        .push(s.clone());
+      self.structs.push(s.clone());
       return Ok(qualified::Import::Struct(s));
     };
 
@@ -127,9 +111,7 @@ impl<'init> ImportQualifier<'init> {
       .find(|fd| fd.name == name)
       .cloned()
     {
-      self
-        .fundecls
-        .push(fd.clone());
+      self.fundecls.push(fd.clone());
       return Ok(qualified::Import::Fun(fd));
     };
 
@@ -140,9 +122,7 @@ impl<'init> ImportQualifier<'init> {
       .find(|v| v.name == name)
       .cloned()
     {
-      self
-        .vals
-        .push(v.clone());
+      self.vals.push(v.clone());
       return Ok(qualified::Import::Val(v));
     }
 

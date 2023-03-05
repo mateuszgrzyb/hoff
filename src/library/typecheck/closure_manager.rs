@@ -12,31 +12,19 @@ impl ClosureManager {
   }
 
   fn get_tail(&mut self) -> &mut Closure {
-    if self
-      .closures
-      .is_empty()
-    {
-      self
-        .closures
-        .push(Vec::new())
+    if self.closures.is_empty() {
+      self.closures.push(Vec::new())
     }
 
-    self
-      .closures
-      .last_mut()
-      .unwrap()
+    self.closures.last_mut().unwrap()
   }
 
   pub fn push_layer(&mut self) {
-    self
-      .closures
-      .push(Vec::new());
+    self.closures.push(Vec::new());
   }
 
   pub fn pop_layer(&mut self) {
-    self
-      .closures
-      .pop();
+    self.closures.pop();
   }
 
   pub fn append(&mut self, mut closure: Closure) {
@@ -45,14 +33,9 @@ impl ClosureManager {
   }
 
   pub fn clone(&self) -> Closure {
-    let result = self
-      .closures
-      .clone();
+    let result = self.closures.clone();
 
-    result
-      .into_iter()
-      .flatten()
-      .collect()
+    result.into_iter().flatten().collect()
   }
 
   pub fn push(&mut self, name: String, type_: Type) {

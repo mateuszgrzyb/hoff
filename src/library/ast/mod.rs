@@ -64,11 +64,7 @@ impl<T, C, S> Expr<T, C, S> {
 
     for capture in STRING_TEMPLATE_RE.captures_iter(template.as_str()) {
       if let Some(matched) = capture.get(1) {
-        args.push(
-          matched
-            .as_str()
-            .to_string(),
-        );
+        args.push(matched.as_str().to_string());
       }
     }
 
@@ -194,25 +190,19 @@ pub mod untyped {
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {
-      self
-        .name
-        .clone()
+      self.name.clone()
     }
   }
 
   impl Nameable for Struct {
     fn get_name(&self) -> String {
-      self
-        .name
-        .clone()
+      self.name.clone()
     }
   }
 
   impl Nameable for ValDecl {
     fn get_name(&self) -> String {
-      self
-        .name
-        .clone()
+      self.name.clone()
     }
   }
 }
@@ -239,9 +229,7 @@ pub mod qualified {
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {
-      self
-        .name
-        .clone()
+      self.name.clone()
     }
   }
 
@@ -283,9 +271,7 @@ pub mod typed {
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {
-      self
-        .name
-        .clone()
+      self.name.clone()
     }
   }
 }

@@ -7,7 +7,7 @@ use clap::Parser;
 use crate::{
   compile::Compile,
   library::cli::Args,
-  repl::repl,
+  repl::REPL,
 };
 
 mod compile;
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let args: Args = Args::parse();
 
   if args.repl {
-    repl(args)
+    REPL::create(args).run_loop()
   } else {
     Compile::create(args).compile()
   }

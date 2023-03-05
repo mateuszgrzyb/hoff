@@ -3,7 +3,7 @@ val a: String = "33"
 
 fun main (): Int {
     val name: String = "Mary";
-    val age: Int = 33;
+    val age: Float = 33.;
     val animal: String = "lamb";
     val msg: String = $"{name} is {age} years old and has one {animal}";
     0

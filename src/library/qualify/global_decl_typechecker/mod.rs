@@ -51,18 +51,10 @@ impl GlobalDeclTypechecker {
   }
 
   fn populate_types(&mut self) {
-    self
-      .types
-      .insert("Int".to_string(), SimpleType::Int);
-    self
-      .types
-      .insert("Bool".to_string(), SimpleType::Bool);
-    self
-      .types
-      .insert("Float".to_string(), SimpleType::Float);
-    self
-      .types
-      .insert("String".to_string(), SimpleType::String);
+    self.types.insert("Int".to_string(), SimpleType::Int);
+    self.types.insert("Bool".to_string(), SimpleType::Bool);
+    self.types.insert("Float".to_string(), SimpleType::Float);
+    self.types.insert("String".to_string(), SimpleType::String);
   }
 
   fn check_args(
@@ -88,11 +80,7 @@ impl GlobalDeclTypechecker {
         let ts = self.check_struct(s)?;
         self
           .types
-          .insert(
-            ts.name
-              .clone(),
-            SimpleType::Struct(ts.clone()),
-          );
+          .insert(ts.name.clone(), SimpleType::Struct(ts.clone()));
         Ok(ts)
       })
       .collect();
@@ -114,10 +102,7 @@ impl GlobalDeclTypechecker {
     &self,
     fds: Vec<untyped::FunDecl>,
   ) -> TypeCheckResult<Vec<typed::FunDecl>> {
-    fds
-      .into_iter()
-      .map(|fd| self.check_fundecl(fd))
-      .collect()
+    fds.into_iter().map(|fd| self.check_fundecl(fd)).collect()
   }
 
   fn check_fundecl(
@@ -138,10 +123,7 @@ impl GlobalDeclTypechecker {
     let mut name_sorter = Sorter::create(vds);
     let vds = name_sorter.sort()?;
 
-    vds
-      .into_iter()
-      .map(|fd| self.check_val(fd))
-      .collect()
+    vds.into_iter().map(|fd| self.check_val(fd)).collect()
   }
 
   fn check_val(

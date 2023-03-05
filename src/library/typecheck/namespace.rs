@@ -14,15 +14,9 @@ impl Namespace {
   }
 
   pub fn create_qualified_name(&mut self, name: String) -> String {
-    self
-      .nested_name
-      .push(name.clone());
-    let qualified_name = self
-      .nested_name
-      .join("$$$");
-    self
-      .qualified_names
-      .insert(name, qualified_name.clone());
+    self.nested_name.push(name.clone());
+    let qualified_name = self.nested_name.join("$$$");
+    self.qualified_names.insert(name, qualified_name.clone());
     qualified_name
   }
 
@@ -35,8 +29,6 @@ impl Namespace {
   }
 
   pub fn drop_qualified_name(&mut self) {
-    self
-      .nested_name
-      .pop();
+    self.nested_name.pop();
   }
 }
