@@ -1,8 +1,13 @@
 version: "3.9"
 
 services:
-  compiler:
+  main:
     build:
       dockerfile: Dockerfile
       context: .
-    command: ["testlang", "--help"]
+    volumes:
+      - ./:/app
+      - build:/app/target
+
+volumes:
+  build:
