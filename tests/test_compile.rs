@@ -1,55 +1,112 @@
+use std::{
+  fs::{read_dir, read_to_string, DirEntry},
+  path::PathBuf,
+  process::Command,
+};
+
 use rstest::*;
-use std::fs::{read_dir, read_to_string};
-use std::path::PathBuf;
-use std::process::Command;
+use similar::{ChangeTag, TextDiff};
 
 #[fixture]
 fn command() -> Command {
-    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    path.push("target/debug/testlang");
-    Command::new(path)
+  let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+  path.push("target/debug/hoff");
+  Command::new(path)
 }
 
 #[fixture]
 fn cli(mut command: Command) -> Command {
-    command.args(["--emit-llvm", "--emit-llvm-target", "stdout"]);
-    command
+  command.args(["-d", "llvmir", "-t", "stdout"]);
+  command
+}
+
+fn split_into_two<DES>(
+  dir: &String,
+  dir_entries: DES,
+  match_fst: fn(&String) -> bool,
+  match_snd: fn(&String) -> bool,
+) -> Result<(Vec<String>, Vec<String>), Vec<String>>
+where
+  DES: Iterator<Item = std::io::Result<DirEntry>>,
+{
+  let mut fst = Vec::new();
+  let mut snd = Vec::new();
+  let mut mismatched = Vec::new();
+  for e in dir_entries {
+    let file_name = e.unwrap().file_name().into_string().unwrap();
+
+    let v = if match_fst(&file_name) {
+      &mut fst
+    } else if match_snd(&file_name) {
+      &mut snd
+    } else {
+      &mut mismatched
+    };
+
+    v.push(format!("{}/{}", dir, file_name))
+  }
+
+  fst.sort();
+  snd.sort();
+  mismatched.sort();
+
+  if mismatched.is_empty() {
+    Ok((fst, snd))
+  } else {
+    Err(mismatched)
+  }
 }
 
 #[rstest]
-#[case("tests/data/test1/input.hff", "tests/data/test1/output.ir")]
-#[case("tests/data/test2/input.hff", "tests/data/test2/output.ir")]
-#[case("tests/data/test3/input.hff", "tests/data/test3/output.ir")]
-fn test_compile(
-    mut cli: Command,
-    #[case] input_file: String,
-    #[case] output_file: String,
-) {
-    // configure all test cases
-    for f in read_dir("tests/data").unwrap() {
-        println!("{:?}", f)
-    }
+#[case("test1")]
+#[case("test2")]
+#[case("test3")]
+#[case("test4")]
+#[case("test5")]
+#[case("test6")]
+fn test_compile(mut cli: Command, #[case] dir: &str) {
+  // given
+  let dir = "tests/data/".to_string() + dir;
+  let (input_files, output_files) = split_into_two(
+    &dir,
+    read_dir(&dir).unwrap(),
+    |name| name.ends_with(".hff"),
+    |name| name.ends_with(".ir"),
+  )
+  .unwrap();
 
-    // given
-    let expected_output = read_to_string(output_file)
+  let expected_output = output_files
+    .into_iter()
+    .map(|of| {
+      read_to_string(of)
         .map(|s| s.trim_end_matches("\n").to_string())
-        .unwrap();
+        .unwrap()
+    })
+    .collect::<Vec<_>>()
+    .join("\n\n");
 
-    // when
-    let output = cli
-        .arg(input_file)
-        .output()
-        .expect("Failed to execute command");
+  // when
+  let output = cli.args(input_files).output().unwrap();
 
-    // then
-    let stdout = String::from_utf8(output.stdout)
-        .map(|s| s.trim_end_matches("\n").to_string())
-        .unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
+  // then
+  let stdout = String::from_utf8(output.stdout)
+    .map(|s| s.trim_end_matches("\n").to_string())
+    .unwrap();
+  let stderr = String::from_utf8(output.stderr).unwrap();
 
-    println!("{}", stdout);
-    println!("{}", stderr);
+  println!("stderr: {}", stderr);
 
-    assert!(stderr.is_empty());
-    assert_eq!(stdout, expected_output);
+  let diff = TextDiff::from_lines(stdout.as_str(), expected_output.as_str());
+
+  for change in diff.iter_all_changes() {
+    let sign = match change.tag() {
+      ChangeTag::Delete => "-",
+      ChangeTag::Insert => "+",
+      ChangeTag::Equal => " ",
+    };
+    print!("{}{}", sign, change);
+  }
+
+  assert!(stderr.is_empty());
+  assert_eq!(stdout, expected_output);
 }

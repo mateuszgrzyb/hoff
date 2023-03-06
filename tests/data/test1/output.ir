@@ -3,6 +3,8 @@ source_filename = "tests/data/test1/input.hff.ir"
 
 declare i32 @puts(i8*)
 
+declare i32 @sprintf(i8*, i8*, ...)
+
 define i32 @fibo(i32 %n) {
 entry:
   %ilt = icmp slt i32 %n, 2

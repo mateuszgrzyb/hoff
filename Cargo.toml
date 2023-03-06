@@ -1,19 +1,19 @@
 [package]
-name = "testlang"
+name = "hoff"
 version = "0.1.0"
 edition = "2021"
 
 
-[build-dependencies]
-lalrpop = "0.19.8"
-
-
 [dependencies]
 clap = { version = "4.0.29", features = ["derive"] }
+current_platform = "0.2.0"
 inkwell = { git = "https://github.com/TheDan64/inkwell", features = ["llvm11-0"], branch = "master" }
-lalrpop-util = { version = "0.19.8", features = ["lexer"] }
+lazy_static = "1.4.0"
+peg = "0.8.1"
 regex = "1.7.0"
 
 
 [dev-dependencies]
+indoc = "2.0.0"
 rstest = "0.16.0"
+similar = "2.2.1"

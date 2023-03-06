@@ -1,0 +1,6 @@
+; ModuleID = 'tests/data/test4/input.hff'
+source_filename = "tests/data/test4/input.hff.ir"
+
+declare i32 @puts(i8*)
+
+declare i32 @sprintf(i8*, i8*, ...)

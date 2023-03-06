@@ -1,0 +1,7 @@
+from input import Student
+
+fun create_student(name: String, age: Int): Student {
+    Student {
+        name, age
+    }
+}
