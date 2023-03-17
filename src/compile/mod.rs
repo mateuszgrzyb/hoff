@@ -137,10 +137,7 @@ impl Compile {
     QMS: Iterator<Item = qualified::Mod>,
   {
     qms
-      .map(|module| {
-        let mut typechecker = TypeChecker::create();
-        typechecker.check(module)
-      })
+      .map(|module| TypeChecker::create(module).check())
       .collect()
   }
 

@@ -13,13 +13,13 @@ pub trait Nameable {
 }
 
 pub struct UntypedGlobalDecls {
-  fundecls: Vec<untyped::FunDecl>,
+  fundecls: Vec<untyped::FunSig>,
   structs: Vec<untyped::Struct>,
   vals: Vec<untyped::ValDecl>,
 }
 
 pub struct TypedGlobalDecls {
-  fundecls: Vec<typed::FunDecl>,
+  fundecls: Vec<typed::FunSig>,
   structs: Vec<typed::Struct>,
   vals: Vec<typed::ValDecl>,
 }

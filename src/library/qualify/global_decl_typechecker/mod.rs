@@ -92,20 +92,20 @@ impl GlobalDeclTypechecker {
 
   fn check_fundecls(
     &self,
-    fds: Vec<untyped::FunDecl>,
-  ) -> TypeCheckResult<Vec<typed::FunDecl>> {
+    fds: Vec<untyped::FunSig>,
+  ) -> TypeCheckResult<Vec<typed::FunSig>> {
     fds.into_iter().map(|fd| self.check_fundecl(fd)).collect()
   }
 
   fn check_fundecl(
     &self,
-    fd: untyped::FunDecl,
-  ) -> TypeCheckResult<typed::FunDecl> {
+    fd: untyped::FunSig,
+  ) -> TypeCheckResult<typed::FunSig> {
     let name = fd.name;
     let args = self.check_args(fd.args)?;
     let rt = self.get_type(fd.rt)?;
 
-    Ok(typed::FunDecl { name, args, rt })
+    Ok(typed::FunSig { name, args, rt })
   }
 
   fn check_vals(

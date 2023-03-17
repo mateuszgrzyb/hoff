@@ -177,7 +177,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  fn compile_import_fun(&mut self, f: FunDecl) {
+  fn compile_import_fun(&mut self, f: FunSig) {
     let (arg_names, arg_types) = &f.args
             .clone()
             .into_iter()
@@ -202,18 +202,19 @@ impl<'ctx> CodeGen<'ctx> {
   ) -> Value<'ctx> {
     // prepare function type with closure
 
-    let (arg_names, arg_types) = &f.args
+    let (arg_names, arg_types) = &f.sig.args
             .clone()
             .into_iter()
             .chain(closure.clone())
             .map(|(n, t)| (n, self.get_type(&t).into()))
             .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
 
-    let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
+    let fn_type = self.get_type(&f.sig.rt).fn_type(&arg_types[..], false);
 
     // create function value
 
-    let function = self.module.add_function(f.name.as_str(), fn_type, None);
+    let function =
+      self.module.add_function(f.sig.name.as_str(), fn_type, None);
 
     // add names to parameters
 
@@ -233,13 +234,13 @@ impl<'ctx> CodeGen<'ctx> {
     // register closure
 
     self.closures.insert(
-      f.name.clone(),
+      f.sig.name.clone(),
       closure.into_iter().map(|(n, _)| n).collect(),
     );
 
     self.parent_basic_block = Some(basic_block);
 
-    self.functions.insert(f.name, function);
+    self.functions.insert(f.sig.name, function);
     self.current_function = Some(function);
 
     let value = self.compile_expr(f.body);
@@ -272,7 +273,7 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_import_val(&mut self, value: ValDecl) {
-    let f = FunDecl {
+    let f = FunSig {
       name: value.name,
       args: Vec::new(),
       rt: value.t,
@@ -282,9 +283,11 @@ impl<'ctx> CodeGen<'ctx> {
 
   fn compile_val(&mut self, value: Val) {
     let f = Fun {
-      name: value.name,
-      args: Vec::new(),
-      rt: value.t,
+      sig: FunSig {
+        name: value.name,
+        args: Vec::new(),
+        rt: value.t,
+      },
       body: value.expr,
     };
     self.compile_fun(f, Vec::new());
@@ -663,23 +666,25 @@ mod test {
           ]),
         }),
         Decl::Fun(Fun {
-          name: "f1".to_string(),
-          args: Vec::from([(
-            "a".to_string(),
-            Type::Simple(SimpleType::Struct(Struct {
-              name: "Foo".to_string(),
-              args: Vec::from([
-                ("a".to_string(), Type::Simple(SimpleType::Int)),
-                ("b".to_string(), Type::Simple(SimpleType::Bool)),
-                ("c".to_string(), Type::Simple(SimpleType::String)),
-              ]),
-            })),
-          )]),
-          rt: Type::Simple(SimpleType::Int),
+          sig: FunSig {
+            name: "f1".to_string(),
+            args: Vec::from([(
+              "a".to_string(),
+              Type::Simple(SimpleType::Struct(Struct {
+                name: "Foo".to_string(),
+                args: Vec::from([
+                  ("a".to_string(), Type::Simple(SimpleType::Int)),
+                  ("b".to_string(), Type::Simple(SimpleType::Bool)),
+                  ("c".to_string(), Type::Simple(SimpleType::String)),
+                ]),
+              })),
+            )]),
+            rt: Type::Simple(SimpleType::Int),
+          },
           body: Expr::Lit(Lit::Int(32)),
         }),
       ]),
-      imports: Imports::create(),
+      imports: Imports::default(),
     };
     let expected_module_str = indoc! {r#"
             ; ModuleID = 'test_1'

@@ -1,7 +1,7 @@
 use crate::library::{ast::untyped::*, qualify::UntypedGlobalDecls};
 
 pub struct GlobalDeclCollector {
-  fundecls: Vec<FunDecl>,
+  fundecls: Vec<FunSig>,
   structs: Vec<Struct>,
   vals: Vec<ValDecl>,
 }
@@ -34,10 +34,10 @@ impl GlobalDeclCollector {
   fn process_decl(&mut self, d: &Decl) {
     match d {
       Decl::Fun(f) => {
-        let fundecl = FunDecl {
-          name: f.name.clone(),
-          args: f.args.clone(),
-          rt: f.rt.clone(),
+        let fundecl = FunSig {
+          name: f.sig.name.clone(),
+          args: f.sig.args.clone(),
+          rt: f.sig.rt.clone(),
         };
         self.fundecls.push(fundecl)
       }

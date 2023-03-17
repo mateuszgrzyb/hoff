@@ -8,10 +8,7 @@ use namespace::Namespace;
 use regex::Captures;
 
 use crate::library::{
-  ast::{
-    qualified, typed, Decl, Expr, Fun, Lit, Mod, Op, SimpleType, Struct, Type,
-    Val,
-  },
+  ast::{qualified, typed, *},
   utils::STRING_TEMPLATE_RE,
 };
 
@@ -41,7 +38,7 @@ pub struct TypeChecker {
 }
 
 impl TypeChecker {
-  pub fn create() -> Self {
+  pub fn create(m: qualified::Mod) -> Self {
     Self {
       values: HashMap::new(),
       functions: HashMap::from([(
@@ -55,8 +52,12 @@ impl TypeChecker {
       closure: Vec::new(),
       closure_manager: ClosureManager::new(),
       namespace: Namespace::new(),
-      module: qualified::Mod::empty(),
+      module: m,
     }
+  }
+
+  pub fn create_empty() -> Self {
+    Self::create(Mod::default())
   }
 
   pub fn get_type_of_expr(
@@ -143,12 +144,7 @@ impl TypeChecker {
     }
   }
 
-  pub fn check(
-    &mut self,
-    m: qualified::Mod,
-  ) -> Result<typed::Mod, Box<dyn Error>> {
-    self.module = m;
-
+  pub fn check(&mut self) -> Result<typed::Mod, Box<dyn Error>> {
     let name = self.module.name.clone();
     let decls = self.typecheck_decls(self.module.decls.clone())?;
     let imports = self.module.imports.clone();
@@ -194,9 +190,9 @@ impl TypeChecker {
   }
 
   fn typecheck_fun(&mut self, f: qualified::Fun) -> CheckResult<typed::Fun> {
-    let name = self.namespace.create_qualified_name(f.name);
-    let args = self.typecheck_fun_args(f.args)?;
-    let rt = self.get_type(f.rt)?;
+    let name = self.namespace.create_qualified_name(f.sig.name);
+    let args = self.typecheck_fun_args(f.sig.args)?;
+    let rt = self.get_type(f.sig.rt)?;
 
     args.v.iter().for_each(|(n, t)| {
       self.values.insert(n.clone(), t.clone());
@@ -229,9 +225,11 @@ impl TypeChecker {
 
     Ok(TypedValue {
       v: Fun {
-        name,
-        args: args.v,
-        rt,
+        sig: FunSig {
+          name,
+          args: args.v,
+          rt,
+        },
         body: body.v,
       },
       t: Type::Function(t),
@@ -553,9 +551,11 @@ impl TypeChecker {
       return TypedValue::get(
         Expr::Function(
           Box::new(Fun {
-            name: partial_name,
-            args,
-            rt,
+            sig: FunSig {
+              name: partial_name,
+              args,
+              rt,
+            },
             body,
           }),
           self.closure.clone(),
@@ -671,7 +671,7 @@ mod test {
 
   #[fixture]
   fn typechecker() -> TypeChecker {
-    TypeChecker::create()
+    TypeChecker::create_empty()
   }
 
   // typecheck_lit

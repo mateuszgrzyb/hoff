@@ -3,7 +3,7 @@ use std::error::Error;
 use crate::library::{
   ast::{
     qualified,
-    typed::{FunDecl, Struct, ValDecl},
+    typed::{FunSig, Struct, ValDecl},
     untyped, Decl, Mod,
   },
   qualify::TypedGlobalDecls,
@@ -13,7 +13,7 @@ type QualifyResult<V> = Result<V, Box<dyn Error>>;
 
 pub struct ImportQualifier<'init> {
   global_decls: &'init TypedGlobalDecls,
-  fundecls: Vec<FunDecl>,
+  fundecls: Vec<FunSig>,
   structs: Vec<Struct>,
   vals: Vec<ValDecl>,
 }

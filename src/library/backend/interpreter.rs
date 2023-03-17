@@ -34,7 +34,7 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     let import_qualifier = ImportQualifier::create(&global_decls);
 
     Self {
-      typechecker: TypeChecker::create(),
+      typechecker: TypeChecker::create_empty(),
       qualifier: import_qualifier,
       codegen,
       execution_engine,
@@ -101,9 +101,11 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     rt: typed::Type,
   ) -> Result<typed::Mod, Box<dyn Error>> {
     let main = typed::Fun {
-      name: "main".to_string(),
-      args: Vec::new(),
-      rt,
+      sig: typed::FunSig {
+        name: "main".to_string(),
+        args: Vec::new(),
+        rt,
+      },
       body,
     };
 
@@ -116,7 +118,7 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     Ok(typed::Mod {
       name: "repl".to_string(),
       decls,
-      imports: typed::Imports::create(),
+      imports: typed::Imports::default(),
     })
   }
 }

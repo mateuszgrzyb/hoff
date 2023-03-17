@@ -7,6 +7,15 @@ fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
   Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
 }
 
+// Precedence
+// 0. (),
+// 1. let x = ..., fun asdf...
+// 2, Value, Lit
+// 3. *, /
+// 4. +, -
+// 5. ;
+// 6. f()
+
 parser! {
   grammar hoff() for str {
 
@@ -36,7 +45,12 @@ parser! {
 
     pub rule _fun() -> Fun
       = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() __ "{" __ b:expr() __ "}" {
-        Fun { name: n, args: a, rt: t, body: b }
+        Fun {
+          sig: FunSig {
+           name: n, args: a, rt: t,
+          },
+          body: b,
+        }
       }
 
     pub rule fun() -> Decl
@@ -387,13 +401,15 @@ mod test {
     // given
     let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
     let exp_fn_ast = Decl::Fun(Fun {
-      name: "name".into(),
-      args: Vec::from([
-        ("a".into(), Type::Simple("Int".into())),
-        ("b".into(), Type::Simple("Int".into())),
-        ("c".into(), Type::Simple("Int".into())),
-      ]),
-      rt: Type::Simple("Int".into()),
+      sig: FunSig {
+        name: "name".into(),
+        args: Vec::from([
+          ("a".into(), Type::Simple("Int".into())),
+          ("b".into(), Type::Simple("Int".into())),
+          ("c".into(), Type::Simple("Int".into())),
+        ]),
+        rt: Type::Simple("Int".into()),
+      },
       body: (Expr::Lit(Lit::Int(33))),
     });
 
@@ -420,38 +436,46 @@ mod test {
         "#;
     let exp_ast = Vec::from([
       Decl::Fun(Fun {
-        name: "f".into(),
-        args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
-        rt: Type::Simple("Int".into()),
+        sig: FunSig {
+          name: "f".into(),
+          args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(1))),
       }),
       Decl::Fun(Fun {
-        name: "g".into(),
-        args: Vec::from([
-          ("b".into(), Type::Simple("Int".into())),
-          ("c".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+        sig: FunSig {
+          name: "g".into(),
+          args: Vec::from([
+            ("b".into(), Type::Simple("Int".into())),
+            ("c".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(2))),
       }),
       Decl::Fun(Fun {
-        name: "h".into(),
-        args: Vec::from([
-          ("d".into(), Type::Simple("Int".into())),
-          ("e".into(), Type::Simple("Int".into())),
-          ("f".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+        sig: FunSig {
+          name: "h".into(),
+          args: Vec::from([
+            ("d".into(), Type::Simple("Int".into())),
+            ("e".into(), Type::Simple("Int".into())),
+            ("f".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(3))),
       }),
       Decl::Fun(Fun {
-        name: "i".into(),
-        args: Vec::from([
-          ("a".into(), Type::Simple("Int".into())),
-          ("b".into(), Type::Simple("Int".into())),
-          ("c".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+        sig: FunSig {
+          name: "i".into(),
+          args: Vec::from([
+            ("a".into(), Type::Simple("Int".into())),
+            ("b".into(), Type::Simple("Int".into())),
+            ("c".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Value("a".into())),
       }),
     ]);
