@@ -6,14 +6,13 @@ use std::{
 use inkwell::context::Context;
 
 use crate::library::{
-  backend::Interpreter, cli::Args, parser::parse_repl,
-  qualify::TypedGlobalDecls,
+  ast::typed::Decls, backend::Interpreter, cli::Args, parser::parse_repl,
 };
 
 pub struct REPL {
   args: Args,
   context: Context,
-  global_decls: TypedGlobalDecls,
+  global_decls: Decls,
 }
 
 impl REPL {
@@ -21,7 +20,7 @@ impl REPL {
     Self {
       args,
       context: Context::create(),
-      global_decls: TypedGlobalDecls::create(),
+      global_decls: Vec::new(),
     }
   }
 

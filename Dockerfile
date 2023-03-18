@@ -1,10 +1,14 @@
+# syntax=docker/dockerfile-upstream:master-labs
+
 ##############
 # base image #
 ##############
-FROM rust:1.67.1 AS chef
-RUN cargo install cargo-chef && \
-    rustup component add clippy && \
+FROM rust:1.68 AS chef
+RUN <<EOF
+    cargo install cargo-chef
+    rustup component add clippy
     rustup component add rustfmt
+EOF
 WORKDIR /app
 
 ###########
@@ -12,28 +16,34 @@ WORKDIR /app
 ###########
 FROM chef AS planner
 COPY . .
-RUN cargo chef prepare  --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path recipe.json
 
 ########
 # main #
 ########
 FROM chef
 
-RUN apt-get update && \
+RUN <<EOF
+    apt-get update
     apt-get install -y \
         lsb-release \
         wget \
         software-properties-common \
         gnupg
+    rm -rf /var/lib/apt/lists/*
+    apt-get clean
 
-RUN wget https://apt.llvm.org/llvm.sh && \
-    chmod +x llvm.sh && \
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
     ./llvm.sh 11
+EOF
 
-RUN apt-get install -y \
+RUN <<EOF
+    apt-get install -y \
         python3 \
-        python3-pip && \
+        python3-pip
     python3 -m pip install pre-commit
+EOF
 
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json

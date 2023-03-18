@@ -1,56 +1,57 @@
-use crate::library::{ast::untyped::*, qualify::UntypedGlobalDecls};
+use crate::library::ast::untyped::*;
 
 pub struct GlobalDeclCollector {
-  fundecls: Vec<FunSig>,
-  structs: Vec<Struct>,
-  vals: Vec<ValDecl>,
+  decls: Decls,
 }
 
 impl GlobalDeclCollector {
   pub fn create() -> Self {
-    Self {
-      fundecls: Vec::new(),
-      structs: Vec::new(),
-      vals: Vec::new(),
-    }
+    Self { decls: Vec::new() }
   }
 
-  pub fn collect(&mut self, ms: &Vec<Mod>) -> UntypedGlobalDecls {
+  pub fn collect(&mut self, ms: &Vec<Mod>) -> Decls {
     ms.into_iter().for_each(|m| self.process_mod(m));
-
-    UntypedGlobalDecls {
-      fundecls: self.fundecls.clone(),
-      structs: self.structs.clone(),
-      vals: self.vals.clone(),
-    }
+    self.decls.clone()
   }
 
   fn process_mod(&mut self, m: &Mod) {
-    for d in &m.decls {
+    for d in &m.defs {
       self.process_decl(d)
     }
   }
 
-  fn process_decl(&mut self, d: &Decl) {
+  fn process_decl(&mut self, d: &Def) {
     match d {
-      Decl::Fun(f) => {
-        let fundecl = FunSig {
-          name: f.sig.name.clone(),
-          args: f.sig.args.clone(),
-          rt: f.sig.rt.clone(),
-        };
-        self.fundecls.push(fundecl)
+      Def::Fun(f) => {
+        let fundecl = self.get_fun_sig(f);
+        self.decls.push(Decl::Fun(fundecl))
       }
-      Decl::Struct(s) => self.structs.push(s.clone()),
-      Decl::Val(v) => {
+      Def::Struct(s) => self.decls.push(Decl::Struct(s.clone())),
+      Def::Val(v) => {
         let valdecl = ValDecl {
           name: v.name.clone(),
           t: v.t.clone(),
           inner_vals: self.get_inner_vals(v.expr.clone()),
         };
-        self.vals.push(valdecl)
+        self.decls.push(Decl::Val(valdecl))
       }
-      Decl::Import(_) => {}
+      Def::Import(_) => {}
+      Def::Class(c) => {
+        let class = Class {
+          name: c.name.clone(),
+          methods: c.methods.clone(),
+        };
+        self.decls.push(Decl::Class(class))
+      }
+      Def::Impl(_) => {}
+    }
+  }
+
+  fn get_fun_sig(&self, f: &Fun) -> FunSig {
+    FunSig {
+      name: f.sig.name.clone(),
+      args: f.sig.args.clone(),
+      rt: f.sig.rt.clone(),
     }
   }
 
@@ -67,6 +68,11 @@ impl GlobalDeclCollector {
       Expr::Attr(_, _, _) => Vec::new(),
       Expr::New(_, args) => self._map(args),
       Expr::StringTemplate(_, args) => args,
+      Expr::MethodCall(this, _, _, args) => {
+        let mut args = args.clone();
+        args.insert(0, *this);
+        self._map(args)
+      }
     }
   }
 

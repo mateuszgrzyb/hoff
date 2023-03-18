@@ -102,32 +102,16 @@ impl<'ctx> CodeGen<'ctx> {
     .collect()
   }
 
-  fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
-    match t {
-      Type::Simple(SimpleType::Int) => self.types.int.into(),
-      Type::Simple(SimpleType::Bool) => self.types.bool.into(),
-      Type::Simple(SimpleType::Float) => self.types.float.into(),
-      Type::Simple(SimpleType::String) => self.types.string.into(),
-      Type::Function(ts) => {
-        let mut args = ts.clone();
-        let rt = args.pop().unwrap();
-        let rt = self.get_type(&rt);
-        let args = args
-          .into_iter()
-          .map(|a| self.get_type(&a).into())
-          .collect::<Vec<BasicMetadataTypeEnum>>();
-        let ft = match rt {
-          BasicTypeEnum::ArrayType(at) => at.fn_type(&args[..], false),
-          BasicTypeEnum::FloatType(ft) => ft.fn_type(&args[..], false),
-          BasicTypeEnum::IntType(it) => it.fn_type(&args[..], false),
-          BasicTypeEnum::PointerType(pt) => pt.fn_type(&args[..], false),
-          BasicTypeEnum::StructType(st) => st.fn_type(&args[..], false),
-          BasicTypeEnum::VectorType(vt) => vt.fn_type(&args[..], false),
-        };
-
-        ft.ptr_type(AddressSpace::default()).into()
+  fn get_simple_type(&self, st: &SimpleType) -> BasicTypeEnum<'ctx> {
+    match st {
+      SimpleType::Int => self.types.int.into(),
+      SimpleType::Bool => self.types.bool.into(),
+      SimpleType::Float => self.types.float.into(),
+      SimpleType::String => self.types.string.into(),
+      SimpleType::This => {
+        panic!("this type should not be instantiated")
       }
-      Type::Simple(SimpleType::Struct(s)) => self
+      SimpleType::Struct(s) => self
         .structs
         .get(s.name.as_str())
         .unwrap()
@@ -137,17 +121,41 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
+  fn get_function_type(&self, ts: &Vec<Type>) -> BasicTypeEnum<'ctx> {
+    let mut args = ts.clone();
+    let rt = args.pop().unwrap();
+    let rt = self.get_type(&rt);
+    let args = args
+      .into_iter()
+      .map(|a| self.get_type(&a).into())
+      .collect::<Vec<BasicMetadataTypeEnum>>();
+    let ft = match rt {
+      BasicTypeEnum::ArrayType(at) => at.fn_type(&args[..], false),
+      BasicTypeEnum::FloatType(ft) => ft.fn_type(&args[..], false),
+      BasicTypeEnum::IntType(it) => it.fn_type(&args[..], false),
+      BasicTypeEnum::PointerType(pt) => pt.fn_type(&args[..], false),
+      BasicTypeEnum::StructType(st) => st.fn_type(&args[..], false),
+      BasicTypeEnum::VectorType(vt) => vt.fn_type(&args[..], false),
+    };
+
+    ft.ptr_type(AddressSpace::default()).into()
+  }
+
+  fn get_type(&self, t: &Type) -> BasicTypeEnum<'ctx> {
+    match t {
+      Type::Simple(st) => self.get_simple_type(st),
+      Type::Function(ft) => self.get_function_type(ft),
+    }
+  }
+
   pub fn compile_module(&mut self, m: Mod) {
-    for s in m.imports.structs {
-      self.compile_struct(s)
-    }
-
-    for fd in m.imports.fundecls {
-      self.compile_import_fun(fd)
-    }
-
-    for v in m.imports.vals {
-      self.compile_import_val(v)
+    for i in m.imports {
+      match i {
+        Decl::Fun(f) => self.compile_import_fun(f),
+        Decl::Struct(s) => self.compile_struct(s),
+        Decl::Val(v) => self.compile_import_val(v),
+        Decl::Class(c) => { /* noop */ }
+      }
     }
 
     self.module.set_name(m.name.as_str());
@@ -155,24 +163,30 @@ impl<'ctx> CodeGen<'ctx> {
     module_name.push_str(".ir");
     self.module.set_source_file_name(module_name.as_str());
 
-    for d in m.decls.into_iter() {
+    for d in m.defs.into_iter() {
       self.compile_decl(d);
     }
   }
 
-  fn compile_decl(&mut self, d: Decl) {
+  fn compile_decl(&mut self, d: Def) {
     match d {
-      Decl::Fun(f) => {
+      Def::Fun(f) => {
         self.compile_fun(f, Vec::new());
       }
-      Decl::Struct(s) => {
+      Def::Struct(s) => {
         self.compile_struct(s);
       }
-      Decl::Val(v) => {
+      Def::Val(v) => {
         self.compile_val(v);
       }
-      Decl::Import(_) => {
+      Def::Import(_) => {
         // imports are compiled before all declarations
+      }
+      Def::Class(c) => {
+        // noop
+      }
+      Def::Impl(i) => {
+        self.compile_impl(i);
       }
     }
   }
@@ -293,6 +307,24 @@ impl<'ctx> CodeGen<'ctx> {
     self.compile_fun(f, Vec::new());
   }
 
+  fn _prepare_impl_fun(&mut self, impl_: &Impl, f: Fun) -> Fun {
+    let name = get_method_name(&impl_.t, &f.sig.name);
+    let args = f.sig.args;
+    let rt = f.sig.rt;
+
+    Fun {
+      sig: FunSig { name, args, rt },
+      body: f.body,
+    }
+  }
+
+  fn compile_impl(&mut self, impl_: Impl) {
+    for i in impl_.impls.clone() {
+      let i = self._prepare_impl_fun(&impl_, i);
+      self.compile_fun(i, Vec::new());
+    }
+  }
+
   fn compile_expr(&mut self, e: Expr) -> Value<'ctx> {
     match e {
       Expr::BinOp(lh, op, rh) => self.compile_binop(*lh, op, *rh),
@@ -309,6 +341,9 @@ impl<'ctx> CodeGen<'ctx> {
       Expr::New(name, args) => self.compile_new(name, args),
       Expr::StringTemplate(template, args) => {
         self.compile_string_template(template, args)
+      }
+      Expr::MethodCall(this, tname, method, args) => {
+        self.compile_method_call(*this, tname, method, args)
       }
     }
   }
@@ -631,6 +666,19 @@ impl<'ctx> CodeGen<'ctx> {
 
     template_value_result
   }
+
+  fn compile_method_call(
+    &mut self,
+    this: Expr,
+    tname: String,
+    method: String,
+    args: Vec<Expr>,
+  ) -> Value<'ctx> {
+    let name = get_method_name_by_tname(tname, method);
+    let mut args = args.clone();
+    args.insert(0, this);
+    self.compile_call(name, args)
+  }
 }
 
 #[cfg(test)]
@@ -656,8 +704,8 @@ mod test {
     // given
     let m = Mod {
       name: "test_1".to_string(),
-      decls: Vec::from([
-        Decl::Struct(Struct {
+      defs: Vec::from([
+        Def::Struct(Struct {
           name: "Foo".to_string(),
           args: Vec::from([
             ("a".to_string(), Type::Simple(SimpleType::Int)),
@@ -665,7 +713,7 @@ mod test {
             ("c".to_string(), Type::Simple(SimpleType::String)),
           ]),
         }),
-        Decl::Fun(Fun {
+        Def::Fun(Fun {
           sig: FunSig {
             name: "f1".to_string(),
             args: Vec::from([(
@@ -684,7 +732,7 @@ mod test {
           body: Expr::Lit(Lit::Int(32)),
         }),
       ]),
-      imports: Imports::default(),
+      imports: Decls::default(),
     };
     let expected_module_str = indoc! {r#"
             ; ModuleID = 'test_1'

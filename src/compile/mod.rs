@@ -98,7 +98,7 @@ impl Compile {
         let imports = ();
         Ok(untyped::Mod {
           name,
-          decls,
+          defs: decls,
           imports,
         })
       })

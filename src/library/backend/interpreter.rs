@@ -6,7 +6,7 @@ use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
   codegen::CodeGen,
-  qualify::{ImportQualifier, TypedGlobalDecls},
+  qualify::ImportQualifier,
   typecheck::TypeChecker,
 };
 
@@ -15,12 +15,12 @@ pub struct Interpreter<'init, 'ctx> {
   qualifier: ImportQualifier<'init>,
   codegen: CodeGen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
-  decls: Vec<untyped::Decl>,
+  decls: Vec<untyped::Def>,
 }
 
 impl<'init, 'ctx> Interpreter<'init, 'ctx> {
   pub fn create(
-    global_decls: &'init TypedGlobalDecls,
+    global_decls: &'init typed::Decls,
     context: &'ctx Context,
     opt_level: u32,
   ) -> Self {
@@ -48,7 +48,7 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
   ) -> Result<String, Box<dyn Error>> {
     match repl {
       untyped::Repl::Expr(expr) => self.eval_expr(expr),
-      untyped::Repl::Decl(decl) => self.eval_decl(decl),
+      untyped::Repl::Def(decl) => self.eval_decl(decl),
     }
   }
 
@@ -89,7 +89,7 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
 
   fn eval_decl(
     &mut self,
-    decl: untyped::Decl,
+    decl: untyped::Def,
   ) -> Result<String, Box<dyn Error>> {
     self.decls.push(decl);
     Ok("".to_string())
@@ -113,12 +113,12 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     let decls = self.qualifier.qualify_decls(decls)?;
     let mut decls = self.typechecker.typecheck_decls(decls)?;
 
-    decls.push(typed::Decl::Fun(main));
+    decls.push(typed::Def::Fun(main));
 
     Ok(typed::Mod {
       name: "repl".to_string(),
-      decls,
-      imports: typed::Imports::default(),
+      defs: decls,
+      imports: typed::Decls::default(),
     })
   }
 }

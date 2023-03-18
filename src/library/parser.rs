@@ -25,45 +25,58 @@ parser! {
       = repl_decl() / repl_expr()
 
     pub rule repl_decl() -> Repl
-      = d:decl() { Repl::Decl(d) }
+      = d:decl() { Repl::Def(d) }
 
     pub rule repl_expr() -> Repl
       = e:expr() { Repl::Expr(e) }
 
     // Compile
 
-    pub rule decls() -> Vec<Decl>
+    pub rule decls() -> Vec<Def>
       = __ ds:(decl() ** __) __ { ds }
 
-    pub rule decl() -> Decl
-      = val() / fun() / struct_() / import()
+    pub rule decl() -> Def
+      = val() / fun() / struct_() / import() / class() / impl_()
 
-    pub rule val() -> Decl
+    pub rule val() -> Def
       = "val" _ tid:typedid() __ "=" __ e:expr() {
-        Decl::Val(Val{ name: tid.0, t: tid.1, expr: e })
+        Def::Val(Val{ name: tid.0, t: tid.1, expr: e })
+      }
+
+    pub rule fun_sig() -> FunSig
+      = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() {
+        FunSig { name: n, args: a, rt: t }
       }
 
     pub rule _fun() -> Fun
-      = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() __ "{" __ b:expr() __ "}" {
+      = fs:fun_sig() __ "{" __ b:expr() __ "}" {
         Fun {
-          sig: FunSig {
-           name: n, args: a, rt: t,
-          },
+          sig: fs,
           body: b,
         }
       }
 
-    pub rule fun() -> Decl
-      = f:_fun() { Decl::Fun(f) }
+    pub rule fun() -> Def
+      = f:_fun() { Def::Fun(f) }
 
-    pub rule struct_() -> Decl
+    pub rule struct_() -> Def
       = "type" _ n:tid() __ "{" __ a:(typedid() ** (__ "," __)) __ "}" {
-        Decl::Struct(Struct { name: n, args: a })
+        Def::Struct(Struct { name: n, args: a })
       }
 
-    pub rule import() -> Decl
+    pub rule import() -> Def
       = "from" _ q:(id() ** "::") _ "import" _ n:(id() / tid()) {
-        Decl::Import((q, n))
+        Def::Import((q, n))
+      }
+
+    pub rule class() -> Def
+      = "class" _ n:tid() __ "{" __ ms:(fun_sig() ** __) __ "}" {
+        Def::Class(Class { name: n, methods: ms })
+      }
+
+    pub rule impl_() -> Def
+      = "impl" _ cn:tid() _ "for" _ t:tid() __ "{" __ is:(_fun() ** __) __ "}" {
+        Def::Impl(Impl { class_name: cn, t: t, impls: is })
       }
 
     // Expr
@@ -71,6 +84,8 @@ parser! {
     pub rule expr() -> Expr
       = precedence!{
         x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(x), Box::new(y)) }
+        --
+        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(t), (), m, a) }
         --
         i:id() __ "->" __ a:id() { Expr::Attr(i, (), a) }
         --
@@ -400,7 +415,7 @@ mod test {
   fn test_fun() {
     // given
     let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
-    let exp_fn_ast = Decl::Fun(Fun {
+    let exp_fn_ast = Def::Fun(Fun {
       sig: FunSig {
         name: "name".into(),
         args: Vec::from([
@@ -435,7 +450,7 @@ mod test {
 
         "#;
     let exp_ast = Vec::from([
-      Decl::Fun(Fun {
+      Def::Fun(Fun {
         sig: FunSig {
           name: "f".into(),
           args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
@@ -443,7 +458,7 @@ mod test {
         },
         body: (Expr::Lit(Lit::Int(1))),
       }),
-      Decl::Fun(Fun {
+      Def::Fun(Fun {
         sig: FunSig {
           name: "g".into(),
           args: Vec::from([
@@ -454,7 +469,7 @@ mod test {
         },
         body: (Expr::Lit(Lit::Int(2))),
       }),
-      Decl::Fun(Fun {
+      Def::Fun(Fun {
         sig: FunSig {
           name: "h".into(),
           args: Vec::from([
@@ -466,7 +481,7 @@ mod test {
         },
         body: (Expr::Lit(Lit::Int(3))),
       }),
-      Decl::Fun(Fun {
+      Def::Fun(Fun {
         sig: FunSig {
           name: "i".into(),
           args: Vec::from([

@@ -11,25 +11,3 @@ use crate::library::ast::{typed, untyped};
 pub trait Nameable {
   fn get_name(&self) -> String;
 }
-
-pub struct UntypedGlobalDecls {
-  fundecls: Vec<untyped::FunSig>,
-  structs: Vec<untyped::Struct>,
-  vals: Vec<untyped::ValDecl>,
-}
-
-pub struct TypedGlobalDecls {
-  fundecls: Vec<typed::FunSig>,
-  structs: Vec<typed::Struct>,
-  vals: Vec<typed::ValDecl>,
-}
-
-impl TypedGlobalDecls {
-  pub fn create() -> Self {
-    Self {
-      fundecls: Vec::new(),
-      structs: Vec::new(),
-      vals: Vec::new(),
-    }
-  }
-}
