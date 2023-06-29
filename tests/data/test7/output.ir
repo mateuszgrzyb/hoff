@@ -1,0 +1,21 @@
+; ModuleID = 'tests/data/test7/input.hff'
+source_filename = "tests/data/test7/input.hff.ir"
+
+%Student = type <{ i8*, i32 }>
+
+@str_tmpl = private unnamed_addr constant [16 x i8] c"Student<%s, %d>\00", align 1
+@str_tmpl_rstl = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
+
+declare i32 @puts(i8*)
+
+declare i32 @sprintf(i8*, i8*, ...)
+
+define i8* @"Struct<Student>$(method)$print"(%Student* %this) {
+entry:
+  %attr = getelementptr inbounds %Student, %Student* %this, i32 0, i32 0
+  %load = load i8*, i8** %attr, align 8
+  %attr1 = getelementptr inbounds %Student, %Student* %this, i32 0, i32 1
+  %load2 = load i32, i32* %attr1, align 4
+  %run_str_tmpl = call i32 (i8*, i8*, ...) @sprintf(i8* getelementptr inbounds ([1 x i8], [1 x i8]* @str_tmpl_rstl, i32 0, i32 0), i8* getelementptr inbounds ([16 x i8], [16 x i8]* @str_tmpl, i32 0, i32 0), i8* %load, i32 %load2)
+  ret i8* getelementptr inbounds ([1 x i8], [1 x i8]* @str_tmpl_rstl, i32 0, i32 0)
+}

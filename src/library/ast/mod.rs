@@ -301,6 +301,44 @@ pub mod typed {
 
   nameable! {Mod}
 
+  /*
+  impl Struct {
+
+    fn instantiate_type(&self, t: Type) -> Type {
+      match t {
+        Type::Simple(SimpleType::This) => Type::Simple(SimpleType::Struct(self.clone())),
+        _ => t,
+      }
+    }
+
+    fn insantiate_method(&self, f: Fun) -> Fun {
+      let name = f.sig.name;
+      let args = f
+        .sig
+        .args
+        .into_iter()
+        .map(|(v, t)| (v, self.instantiate_type(t)))
+        .collect();
+      let rt = self.instantiate_type(f.sig.rt);
+      let body = f.body;
+
+      Fun {
+        sig: FunSig { name, args, rt },
+        body,
+      }
+    }
+
+    pub fn instantiate(&self) -> Self {
+      let name = self.name.clone();
+      let args = self.args.into_iter().map(|i| self.insantiate_method(i)).collect();
+      Self {
+        name,
+        args,
+      }
+    }
+  }
+   */
+
   impl Impl {
     fn instantiate_type(&self, t: Type) -> Type {
       match t {

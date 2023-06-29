@@ -64,6 +64,7 @@ where
 #[case("test4")]
 #[case("test5")]
 #[case("test6")]
+#[case("test7")]
 fn test_compile(mut cli: Command, #[case] dir: &str) {
   // given
   let dir = "tests/data/".to_string() + dir;

@@ -1,0 +1,17 @@
+
+class Printer {
+   fun print(this: This): String
+}
+
+type Student {
+    name: String,
+    age: Int
+}
+
+impl Printer for Student {
+    fun print(this: This): String {
+        val name: String = this->name;
+        val age: Int = this->age;
+        $"Student<{name}, {age}>"
+    }
+}

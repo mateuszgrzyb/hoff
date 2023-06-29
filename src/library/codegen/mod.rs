@@ -154,7 +154,7 @@ impl<'ctx> CodeGen<'ctx> {
         Decl::Fun(f) => self.compile_import_fun(f),
         Decl::Struct(s) => self.compile_struct(s),
         Decl::Val(v) => self.compile_import_val(v),
-        Decl::Class(c) => { /* noop */ }
+        Decl::Class(_) => { /* noop */ }
       }
     }
 
@@ -182,7 +182,7 @@ impl<'ctx> CodeGen<'ctx> {
       Def::Import(_) => {
         // imports are compiled before all declarations
       }
-      Def::Class(c) => {
+      Def::Class(_) => {
         // noop
       }
       Def::Impl(i) => {

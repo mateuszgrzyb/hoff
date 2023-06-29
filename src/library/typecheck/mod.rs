@@ -40,6 +40,7 @@ pub struct TypeChecker {
   closure_manager: ClosureManager,
   namespace: Namespace,
   module: qualified::Mod,
+  type_impl: Option<SimpleType>,
 }
 
 impl TypeChecker {
@@ -60,6 +61,7 @@ impl TypeChecker {
       closure_manager: ClosureManager::new(),
       namespace: Namespace::new(),
       module: m,
+      type_impl: None,
     }
   }
 
@@ -349,7 +351,10 @@ impl TypeChecker {
     impl_: qualified::Impl,
   ) -> ValueResult<typed::Impl> {
     let class_name = impl_.class_name.clone();
+    // TODO: this should always be SimpleType::Struct
     let t = self.get_simple_type(impl_.t.clone())?;
+    self.type_impl = Some(t.clone());
+
     let impls: Vec<typed::Fun> = impl_
       .impls
       .clone()
@@ -383,6 +388,8 @@ impl TypeChecker {
     for i in impls.clone() {
       self.methods.insert(get_method_name(&t, &i.sig.name), i.sig);
     }
+
+    self.type_impl = None;
 
     Ok(
       Impl {
@@ -697,10 +704,17 @@ impl TypeChecker {
     name: String,
     attr: String,
   ) -> CheckResult<(String, typed::Struct, String)> {
-    let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
-      return Err(format!(
-        "Struct `{name}` does not exist.",
-      ).into());
+    // TODO: this exists, but has type This here...
+    //let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
+
+    let struct_ = match (self.get_value(name.clone())?, &self.type_impl) {
+      (Type::Simple(SimpleType::Struct(struct_)), _) => struct_,
+      (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => {
+        struct_.clone()
+      }
+      _ => {
+        return Err(format!("Struct `{name}` does not exist.",).into());
+      }
     };
 
     let Some((_, type_)) = struct_.clone().args.into_iter().find(|(n, _)| n == &attr) else {

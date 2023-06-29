@@ -6,8 +6,6 @@ pub use global_decl_collector::GlobalDeclCollector;
 pub use global_decl_typechecker::GlobalDeclTypechecker;
 pub use import_qualifier::ImportQualifier;
 
-use crate::library::ast::{typed, untyped};
-
 pub trait Nameable {
   fn get_name(&self) -> String;
 }
