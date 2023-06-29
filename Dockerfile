@@ -15,6 +15,7 @@ RUN <<EOF
         lsb-release \
         wget \
         software-properties-common \
+        neovim \
         gnupg
     rm -rf /var/lib/apt/lists/*
     apt-get clean
