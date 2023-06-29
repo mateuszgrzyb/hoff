@@ -5,6 +5,7 @@ source_filename = "tests/data/test7/input.hff.ir"
 
 @str_tmpl = private unnamed_addr constant [16 x i8] c"Student<%s, %d>\00", align 1
 @str_tmpl_rstl = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
+@0 = private unnamed_addr constant [5 x i8] c"Matt\00", align 1
 
 declare i32 @puts(i8*)
 
@@ -19,3 +20,14 @@ entry:
   %run_str_tmpl = call i32 (i8*, i8*, ...) @sprintf(i8* getelementptr inbounds ([1 x i8], [1 x i8]* @str_tmpl_rstl, i32 0, i32 0), i8* getelementptr inbounds ([16 x i8], [16 x i8]* @str_tmpl, i32 0, i32 0), i8* %load, i32 %load2)
   ret i8* getelementptr inbounds ([1 x i8], [1 x i8]* @str_tmpl_rstl, i32 0, i32 0)
 }
+
+define i32 @main() {
+entry:
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student* getelementptr (%Student, %Student* null, i32 1) to i32))
+  %malloc = bitcast i8* %malloccall to %Student*
+  store %Student <{ i8* getelementptr inbounds ([5 x i8], [5 x i8]* @0, i32 0, i32 0), i32 33 }>, %Student* %malloc, align 1
+  %call = call i8* @"Struct<Student>$(method)$print"(%Student* %malloc)
+  ret i32 0
+}
+
+declare noalias i8* @malloc(i32)

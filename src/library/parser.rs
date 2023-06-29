@@ -85,6 +85,8 @@ parser! {
       = precedence!{
         x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(x), Box::new(y)) }
         --
+        "val" _ tid:typedid() __ "=" __ e:@ { Expr::Assign(tid, Box::new(e)) }
+        --
         t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(t), (), m, a) }
         --
         i:id() __ "->" __ a:id() { Expr::Attr(i, (), a) }
@@ -108,7 +110,6 @@ parser! {
         i:if_()      { i }
         c:call()     { c }
         f:fun_expr() { f }
-        "val" _ tid:typedid() __ "=" __ e:@ { Expr::Assign(tid, Box::new(e)) }
         n:new()      { n }
         --
         "(" __ e:expr() __ ")" { e }
