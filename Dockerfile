@@ -3,25 +3,11 @@
 ##############
 # base image #
 ##############
-FROM rust:1.68 AS chef
-RUN <<EOF
-    cargo install cargo-chef
-    rustup component add clippy
+FROM rust:1.70.0 AS chef
+
+RUN cargo install cargo-chef && \
+    rustup component add clippy && \
     rustup component add rustfmt
-EOF
-WORKDIR /app
-
-###########
-# planner #
-###########
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-########
-# main #
-########
-FROM chef
 
 RUN <<EOF
     apt-get update
@@ -44,6 +30,20 @@ RUN <<EOF
         python3-pip
     python3 -m pip install pre-commit
 EOF
+
+WORKDIR /app
+
+###########
+# planner #
+###########
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare  --recipe-path recipe.json
+
+########
+# main #
+########
+FROM chef
 
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
