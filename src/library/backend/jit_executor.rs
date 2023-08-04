@@ -1,5 +1,5 @@
-use std::error::Error;
-
+use anyhow::bail;
+use anyhow::Result;
 use inkwell::{execution_engine::ExecutionEngine, module::Module};
 
 use super::Backend;
@@ -22,12 +22,12 @@ impl<'ctx> JITExecutor<'ctx> {
 }
 
 impl<'ctx> Backend for JITExecutor<'ctx> {
-  fn run(&self) -> Result<(), Box<dyn Error>> {
+  fn run(&self) -> Result<()> {
     unsafe {
       let main = self.execution_engine.get_function::<MainFunc>("main");
 
       let Ok(main) = main else {
-        return Err("Main function was not declared".into())
+        bail!("Main function was not declared")
       };
 
       main.call();

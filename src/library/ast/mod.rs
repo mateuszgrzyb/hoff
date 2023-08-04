@@ -169,21 +169,51 @@ impl Imports {
   }
 }
 
+macro_rules! ast {
+  (
+    T = $T:ty,
+    C = $C:ty,
+    S = $S:ty,
+    I = $I:ty,
+    IS = $IS:ty,
+  ) => {
+    #[allow(dead_code)]
+    pub type Op = super::Op;
+    #[allow(dead_code)]
+    pub type Lit = super::Lit;
+    pub type Expr = super::Expr<$T, $C, $S>;
+    #[allow(dead_code)]
+    pub type FunDecl = super::FunDecl<$T>;
+    pub type Fun = super::Fun<$T, $C, $S>;
+    pub type Struct = super::Struct<$T>;
+    #[allow(dead_code)]
+    pub type ValDecl = super::ValDecl<$T>;
+    pub type Val = super::Val<$T, $C, $S>;
+    pub type Import = $I;
+    #[allow(dead_code)]
+    pub type Imports = $IS;
+    pub type Decl = super::Decl<$T, $C, $S, $I>;
+    pub type Mod = super::Mod<$T, $C, $S, $I, $IS>;
+    #[allow(dead_code)]
+    pub type Repl = super::Repl<$T, $C, $S, $I>;
+    pub type Type = super::Type<$T>;
+    #[allow(dead_code)]
+    pub type SimpleType = super::SimpleType;
+    #[allow(dead_code)]
+    pub type Closure = super::Closure;
+  };
+}
+
 pub mod untyped {
-  pub use super::{Lit, Op};
   use crate::library::qualify::Nameable;
 
-  pub type Expr = super::Expr<String, (), ()>;
-  pub type Fun = super::Fun<String, (), ()>;
-  pub type FunDecl = super::FunDecl<String>;
-  pub type Struct = super::Struct<String>;
-  pub type Val = super::Val<String, (), ()>;
-  pub type ValDecl = super::ValDecl<String>;
-  pub type Import = (Vec<String>, String);
-  pub type Decl = super::Decl<String, (), (), Import>;
-  pub type Mod = super::Mod<String, (), (), Import, ()>;
-  pub type Repl = super::Repl<String, (), (), Import>;
-  pub type Type = super::Type<String>;
+  ast!(
+    T = String,
+    C = (),
+    S = (),
+    I = (Vec<String>, String),
+    IS = (),
+  );
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {
@@ -205,17 +235,15 @@ pub mod untyped {
 }
 
 pub mod qualified {
-  pub use super::{Imports, Lit, Op};
-  use crate::library::{ast::SimpleType, qualify::Nameable};
+  use crate::library::qualify::Nameable;
 
-  pub type Expr = super::Expr<String, (), ()>;
-  pub type Fun = super::Fun<String, (), ()>;
-  pub type Struct = super::Struct<String>;
-  pub type Val = super::Val<String, (), ()>;
-  pub type Import = super::QualifiedImport<SimpleType>;
-  pub type Decl = super::Decl<String, (), (), Import>;
-  pub type Mod = super::Mod<String, (), (), Import, Imports>;
-  pub type Type = super::Type<String>;
+  ast!(
+    T = String,
+    C = (),
+    S = (),
+    I = super::QualifiedImport<super::SimpleType>,
+    IS = super::Imports,
+  );
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {
@@ -228,7 +256,7 @@ pub mod qualified {
       Self {
         name: "".to_string(),
         decls: vec![],
-        imports: Imports {
+        imports: super::Imports {
           fundecls: vec![],
           structs: vec![],
           vals: vec![],
@@ -239,19 +267,15 @@ pub mod qualified {
 }
 
 pub mod typed {
-  pub use super::{Closure, Imports, Lit, Op, SimpleType};
   use crate::library::qualify::Nameable;
 
-  pub type Expr = super::Expr<SimpleType, Closure, Struct>;
-  pub type Fun = super::Fun<SimpleType, Closure, Struct>;
-  pub type FunDecl = super::FunDecl<SimpleType>;
-  pub type Struct = super::Struct<SimpleType>;
-  pub type Val = super::Val<SimpleType, Closure, Struct>;
-  pub type ValDecl = super::ValDecl<SimpleType>;
-  pub type Import = super::QualifiedImport<SimpleType>;
-  pub type Decl = super::Decl<SimpleType, Closure, Struct, Import>;
-  pub type Mod = super::Mod<SimpleType, Closure, Struct, Import, Imports>;
-  pub type Type = super::Type<SimpleType>;
+  ast!(
+    T = super::SimpleType,
+    C = super::Closure,
+    S = super::Struct<super::SimpleType>,
+    I = super::QualifiedImport<super::SimpleType>,
+    IS = super::Imports,
+  );
 
   impl Nameable for Mod {
     fn get_name(&self) -> String {

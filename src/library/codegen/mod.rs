@@ -188,7 +188,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     let function = self.module.add_function(f.name.as_str(), fn_type, None);
 
-    for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
+    for (n, p) in arg_names.iter().zip(function.get_param_iter()) {
       p.set_name(n.as_str());
     }
 
@@ -218,10 +218,10 @@ impl<'ctx> CodeGen<'ctx> {
     // add names to parameters
 
     let basic_block = self.context.append_basic_block(function, "entry");
-    let parent_basic_block = self.parent_basic_block.clone();
+    let parent_basic_block = self.parent_basic_block;
     self.builder.position_at_end(basic_block);
 
-    for (n, p) in arg_names.into_iter().zip(function.get_param_iter()) {
+    for (n, p) in arg_names.iter().zip(function.get_param_iter()) {
       p.set_name(n.as_str());
       if closure.clone().into_iter().any(|(n1, _)| &n1 == n) {
         self.closure.insert(n.clone(), p);
@@ -268,7 +268,7 @@ impl<'ctx> CodeGen<'ctx> {
     let s = self.context.opaque_struct_type(name.as_str());
     s.set_body(&args[..], true);
 
-    self.structs.insert(name, (struct_.clone(), s));
+    self.structs.insert(name, (struct_, s));
   }
 
   fn compile_import_val(&mut self, value: ValDecl) {
@@ -402,17 +402,17 @@ impl<'ctx> CodeGen<'ctx> {
 
   fn compile_value(&self, name: String) -> Value<'ctx> {
     if let Some(value) = self.closure.get(name.as_str()) {
-      return value.clone();
+      return *value;
     }
 
     if let Some(value) = self.values.get(name.as_str()) {
-      return value.clone();
+      return *value;
     }
 
     if let Some(f) = self.functions.get(name.as_str()) {
       return self
         .builder
-        .build_call(f.clone(), &[], "call")
+        .build_call(*f, &[], "call")
         .try_as_basic_value()
         .left()
         .unwrap();
@@ -614,7 +614,7 @@ impl<'ctx> CodeGen<'ctx> {
       .as_basic_value_enum();
 
     let mut sprintf_args =
-      Vec::from([template_value_result.clone().into(), template_value.into()]);
+      Vec::from([template_value_result.into(), template_value.into()]);
     sprintf_args.append(&mut values);
 
     let sprintf = self.functions.get("sprintf").unwrap();

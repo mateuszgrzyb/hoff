@@ -15,8 +15,11 @@ impl GlobalDeclCollector {
     }
   }
 
-  pub fn collect(&mut self, ms: &Vec<Mod>) -> UntypedGlobalDecls {
-    ms.into_iter().for_each(|m| self.process_mod(m));
+  pub fn collect<MS>(&mut self, ms: MS) -> UntypedGlobalDecls
+  where
+    MS: Iterator<Item = Mod>,
+  {
+    ms.for_each(|m| self.process_mod(&m));
 
     UntypedGlobalDecls {
       fundecls: self.fundecls.clone(),

@@ -4,7 +4,7 @@ use peg::*;
 use crate::library::ast::untyped::*;
 
 fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
-  Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
+  Expr::BinOp(Box::new(lh), op, Box::new(rh))
 }
 
 parser! {
