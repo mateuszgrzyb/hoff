@@ -19,14 +19,23 @@ pub struct REPL {
 
 impl REPL {
   pub fn create(args: Args) -> Self {
+    let context = Context::create();
+    let global_decls = Rc::new(TypedGlobalDecls::create());
+
     Self {
       args,
-      context: Context::create(),
-      global_decls: Rc::new(TypedGlobalDecls::create()),
+      context,
+      global_decls,
     }
   }
 
   pub fn run_loop(&self) -> ! {
+    let mut interpreter = Interpreter::create(
+      self.global_decls.clone(),
+      &self.context,
+      self.args.o,
+    );
+
     loop {
       let Ok(input) = Self::read_input()
         .map_err(|err| println!("Input error: {}", err))
@@ -35,12 +44,6 @@ impl REPL {
       let Ok(expr) = parse_repl(&input)
         .map_err(|err| println!("Parse error: {}", err))
         else { continue };
-
-      let mut interpreter = Interpreter::create(
-        self.global_decls.clone(),
-        &self.context,
-        self.args.o,
-      );
 
       let Ok(result) = interpreter.eval(expr)
         .map_err(|err| println!("Eval error: {}", err))
@@ -58,7 +61,7 @@ impl REPL {
   }
 
   fn read_input() -> Result<String> {
-    Self::print_and_flush(">>>");
+    Self::print_and_flush(">>> ");
 
     let mut input = String::new();
 
@@ -67,7 +70,7 @@ impl REPL {
         bail!(err)
       }
 
-      Self::print_and_flush("...");
+      Self::print_and_flush("... ");
     }
 
     let input = input.split(";;").next().unwrap().to_string();

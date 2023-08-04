@@ -16,10 +16,10 @@ parser! {
       = repl_decl() / repl_expr()
 
     pub rule repl_decl() -> Repl
-      = d:decl() { Repl::Decl(d) }
+      = __ d:decl() __ { Repl::Decl(d) }
 
     pub rule repl_expr() -> Repl
-      = e:expr() { Repl::Expr(e) }
+      = __ e:expr() __ { Repl::Expr(e) }
 
     // Compile
 

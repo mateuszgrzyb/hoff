@@ -83,8 +83,9 @@ impl<'ctx> Interpreter<'ctx> {
   }
 
   fn eval_decl(&mut self, decl: untyped::Decl) -> Result<String> {
+    let sig = format!("{:?}", decl);
     self.decls.push(decl);
-    Ok("".to_string())
+    Ok(sig)
   }
 
   fn create_main(
