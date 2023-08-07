@@ -1,5 +1,3 @@
-use crate::library::utils::STRING_TEMPLATE_RE;
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Op {
   Add,
@@ -27,49 +25,17 @@ pub enum Lit {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<T, C, S> {
-  BinOp(Box<Expr<T, C, S>>, Op, Box<Expr<T, C, S>>),
+  BinOp(Box<Self>, Op, Box<Self>),
   Lit(Lit),
   Value(String),
   Function(Box<Fun<T, C, S>>, C),
-  Assign((String, Type<T>), Box<Expr<T, C, S>>),
-  Chain(Box<Expr<T, C, S>>, Box<Expr<T, C, S>>),
-  Call(String, Vec<Expr<T, C, S>>),
-  If(Box<Expr<T, C, S>>, Box<Expr<T, C, S>>, Box<Expr<T, C, S>>),
+  Assign((String, Type<T>), Box<Self>),
+  Chain(Box<Self>, Box<Self>),
+  Call(String, Vec<Self>),
+  If(Box<Self>, Box<Self>, Box<Self>),
   Attr(String, S, String),
-  New(String, Vec<Expr<T, C, S>>),
+  New(String, Vec<Self>),
   StringTemplate(String, Vec<String>),
-}
-
-impl<T, C, S> Expr<T, C, S> {
-  pub fn create_string_template(
-    template: String,
-  ) -> Result<Self, &'static str> {
-    let mut args = Vec::new();
-
-    let mut inside = false;
-
-    for char in template.chars() {
-      match (char, inside) {
-        ('{', false) => {
-          inside = true;
-        }
-        ('{', true) => return Err("string template error: begin"),
-        ('}', false) => return Err("string template error: end"),
-        ('}', true) => {
-          inside = false;
-        }
-        _ => {}
-      }
-    }
-
-    for capture in STRING_TEMPLATE_RE.captures_iter(template.as_str()) {
-      if let Some(matched) = capture.get(1) {
-        args.push(matched.as_str().to_string());
-      }
-    }
-
-    Ok(Self::StringTemplate(template, args))
-  }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -131,7 +97,7 @@ pub enum Repl<T, C, S, I> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Type<T> {
   Simple(T),
-  Function(Vec<Type<T>>),
+  Function(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -140,7 +106,7 @@ pub enum SimpleType {
   Bool,
   Float,
   String,
-  Struct(Struct<SimpleType>),
+  Struct(Struct<Self>),
 }
 
 pub type Closure = Vec<(String, Type<SimpleType>)>;
