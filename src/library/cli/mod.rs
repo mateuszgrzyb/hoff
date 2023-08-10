@@ -25,7 +25,7 @@ pub enum DumpTarget {
 }
 
 #[derive(Parser, Clone, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, arg_required_else_help = true)]
 pub struct Args {
   pub files: Vec<String>,
 
@@ -59,6 +59,6 @@ pub struct Args {
   pub repl: bool,
 
   /// Choose program execution mode
-  #[arg(short = 'm', long, value_enum, default_value_t = RunMode::JIT)]
+  #[arg(short = 'm', long, value_enum, default_value_t = RunMode::Compile)]
   pub mode: RunMode,
 }

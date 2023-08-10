@@ -2,7 +2,8 @@ mod compiler;
 mod interpreter;
 mod jit_executor;
 
-use std::{error::Error, mem::transmute};
+use anyhow::Result;
+use std::mem::transmute;
 
 pub use compiler::Compiler;
 use inkwell::OptimizationLevel;
@@ -10,7 +11,7 @@ pub use interpreter::Interpreter;
 pub use jit_executor::JITExecutor;
 
 pub trait Backend {
-  fn run(&self) -> Result<(), Box<dyn Error>>;
+  fn run(&self) -> Result<()>;
 }
 
 fn get_opt_level(opt_level: u32) -> OptimizationLevel {

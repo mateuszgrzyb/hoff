@@ -1,6 +1,6 @@
 mod sorter;
 
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use crate::library::{
   ast::{typed, untyped, SimpleType},
@@ -10,7 +10,9 @@ use crate::library::{
   },
 };
 
-type TypeCheckResult<V> = Result<V, Box<dyn Error>>;
+use anyhow::{bail, Result};
+
+type TypeCheckResult<V> = Result<V>;
 
 pub struct GlobalDeclTypechecker {
   types: HashMap<String, SimpleType>,
@@ -66,8 +68,7 @@ impl GlobalDeclTypechecker {
     let mut type_sorter = Sorter::create(ss);
     let ss = type_sorter.sort()?;
 
-    let result = ss
-      .into_iter()
+    ss.into_iter()
       .map(|s| {
         let ts = self.check_struct(s)?;
         self
@@ -75,9 +76,7 @@ impl GlobalDeclTypechecker {
           .insert(ts.name.clone(), SimpleType::Struct(ts.clone()));
         Ok(ts)
       })
-      .collect();
-
-    result
+      .collect()
   }
 
   fn check_struct(
@@ -137,16 +136,16 @@ impl GlobalDeclTypechecker {
     match t {
       untyped::Type::Simple(s) => {
         let Some(t) = self.types.get(s.as_str()) else {
-                    return Err(format!("Unknown type: {s}").into())
-                };
+          bail!("Unknown type: {s}")
+        };
         Ok(typed::Type::Simple(t.clone()))
       }
       untyped::Type::Function(ts) => {
         let ts = ts
           .into_iter()
           .map(|t| self.get_type(t))
-          .collect::<Result<Vec<_>, _>>()?;
-        return Ok(typed::Type::Function(ts));
+          .collect::<Result<_, _>>()?;
+        Ok(typed::Type::Function(ts))
       }
     }
   }

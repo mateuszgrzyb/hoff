@@ -1,6 +1,9 @@
-use std::{error::Error, fmt::Debug, fs::write};
+use std::{fmt::Debug, fs::write};
 
 use inkwell::context::Context;
+
+use anyhow::anyhow;
+use anyhow::Result;
 
 use crate::library::{
   cli::{Args, DumpTarget},
@@ -8,15 +11,16 @@ use crate::library::{
   qualify::Nameable,
 };
 
-pub fn dump<I, T>(args: &Args, ms: I) -> Result<(), Box<dyn Error>>
+pub fn dump<I, IS>(args: &Args, is: IS) -> Result<()>
 where
-  T: Debug + Nameable,
-  I: Iterator<Item = T>,
+  I: Debug + Nameable,
+  IS: Iterator<Item = Result<I>>,
 {
-  for m in ms {
-    let contents = format!("{:#?}", m);
+  for i in is {
+    let i = i?;
+    let contents = format!("{:#?}", i);
     match args.dump_target {
-      DumpTarget::File => write(m.get_name(), contents)?,
+      DumpTarget::File => write(i.get_name(), contents)?,
       DumpTarget::StdOut => println!("{contents}"),
     }
   }
@@ -24,15 +28,19 @@ where
   Ok(())
 }
 
-pub fn dump_llvm<'ctx>(
-  args: &Args,
-  codegens: Vec<CodeGen<'ctx>>,
-) -> Result<(), Box<dyn Error>> {
+pub fn dump_llvm<'ctx, CGS>(args: &Args, codegens: CGS) -> Result<()>
+where
+  CGS: Iterator<Item = Result<CodeGen<'ctx>>>,
+{
   for codegen in codegens {
+    let codegen = codegen?;
     let filename = codegen.module.get_source_file_name().to_str()?;
 
     match args.dump_target {
-      DumpTarget::File => codegen.module.print_to_file(filename)?,
+      DumpTarget::File => codegen
+        .module
+        .print_to_file(filename)
+        .map_err(|e| anyhow!(e.to_string()))?,
       DumpTarget::StdOut => {
         println!("{}", codegen.module.to_string())
       }

@@ -1,5 +1,6 @@
-use std::error::Error;
+use std::rc::Rc;
 
+use anyhow::{bail, Result};
 use inkwell::{context::Context, execution_engine::ExecutionEngine};
 
 use crate::library::{
@@ -10,28 +11,28 @@ use crate::library::{
   typecheck::TypeChecker,
 };
 
-pub struct Interpreter<'init, 'ctx> {
+pub struct Interpreter<'ctx> {
   typechecker: TypeChecker,
-  qualifier: ImportQualifier<'init>,
+  qualifier: ImportQualifier,
   codegen: CodeGen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
   decls: Vec<untyped::Decl>,
 }
 
-impl<'init, 'ctx> Interpreter<'init, 'ctx> {
+impl<'ctx> Interpreter<'ctx> {
   pub fn create(
-    global_decls: &'init TypedGlobalDecls,
+    global_decls: Rc<TypedGlobalDecls>,
     context: &'ctx Context,
     opt_level: u32,
   ) -> Self {
     let opt_level = get_opt_level(opt_level);
-    let codegen = CodeGen::create(&context, true);
+    let codegen = CodeGen::create(context, true);
     let execution_engine = codegen
       .module
       .create_jit_execution_engine(opt_level)
       .unwrap();
 
-    let import_qualifier = ImportQualifier::create(&global_decls);
+    let import_qualifier = ImportQualifier::create(global_decls);
 
     Self {
       typechecker: TypeChecker::create(),
@@ -42,21 +43,15 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     }
   }
 
-  pub fn eval(
-    &mut self,
-    repl: untyped::Repl,
-  ) -> Result<String, Box<dyn Error>> {
+  pub fn eval(&mut self, repl: untyped::Repl) -> Result<String> {
     match repl {
       untyped::Repl::Expr(expr) => self.eval_expr(expr),
       untyped::Repl::Decl(decl) => self.eval_decl(decl),
     }
   }
 
-  fn eval_expr(
-    &mut self,
-    expr: untyped::Expr,
-  ) -> Result<String, Box<dyn Error>> {
-    let (body, rt) = self.typechecker.get_type_of_expr(expr.clone())?;
+  fn eval_expr(&mut self, expr: untyped::Expr) -> Result<String> {
+    let (body, rt) = self.typechecker.get_type_of_expr(expr)?;
 
     let main_mod = self.create_main(body, rt.clone())?;
 
@@ -64,7 +59,7 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
 
     let return_value_repr = unsafe {
       let Ok(main) = self.execution_engine.get_function_value("main") else {
-        return Err("some error happened".into())
+        bail!("some error happened")
       };
 
       let return_value = self.execution_engine.run_function(main, &[]);
@@ -87,19 +82,17 @@ impl<'init, 'ctx> Interpreter<'init, 'ctx> {
     Ok(return_value_repr)
   }
 
-  fn eval_decl(
-    &mut self,
-    decl: untyped::Decl,
-  ) -> Result<String, Box<dyn Error>> {
+  fn eval_decl(&mut self, decl: untyped::Decl) -> Result<String> {
+    let sig = format!("{:?}", decl);
     self.decls.push(decl);
-    Ok("".to_string())
+    Ok(sig)
   }
 
   fn create_main(
     &mut self,
     body: typed::Expr,
     rt: typed::Type,
-  ) -> Result<typed::Mod, Box<dyn Error>> {
+  ) -> Result<typed::Mod> {
     let main = typed::Fun {
       name: "main".to_string(),
       args: Vec::new(),

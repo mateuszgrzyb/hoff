@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::rc::Rc;
 
 use crate::library::{
   ast::{
@@ -8,18 +8,20 @@ use crate::library::{
   },
   qualify::TypedGlobalDecls,
 };
+use anyhow::anyhow;
+use anyhow::Result;
 
-type QualifyResult<V> = Result<V, Box<dyn Error>>;
+type QualifyResult<V> = Result<V>;
 
-pub struct ImportQualifier<'init> {
-  global_decls: &'init TypedGlobalDecls,
+pub struct ImportQualifier {
+  global_decls: Rc<TypedGlobalDecls>,
   fundecls: Vec<FunDecl>,
   structs: Vec<Struct>,
   vals: Vec<ValDecl>,
 }
 
-impl<'init> ImportQualifier<'init> {
-  pub fn create(global_decls: &'init TypedGlobalDecls) -> Self {
+impl ImportQualifier {
+  pub fn create(global_decls: Rc<TypedGlobalDecls>) -> Self {
     Self {
       global_decls,
       fundecls: Vec::new(),
@@ -59,10 +61,10 @@ impl<'init> ImportQualifier<'init> {
     d: untyped::Decl,
   ) -> QualifyResult<qualified::Decl> {
     match d {
-      Decl::Fun(f) => self.qualify_fun(f).map(|f| Decl::Fun(f)),
-      Decl::Struct(s) => self.qualify_struct(s).map(|s| Decl::Struct(s)),
-      Decl::Val(v) => self.qualify_val(v).map(|v| Decl::Val(v)),
-      Decl::Import(i) => self.qualify_import(i).map(|i| Decl::Import(i)),
+      Decl::Fun(f) => self.qualify_fun(f).map(Decl::Fun),
+      Decl::Struct(s) => self.qualify_struct(s).map(Decl::Struct),
+      Decl::Val(v) => self.qualify_val(v).map(Decl::Val),
+      Decl::Import(i) => self.qualify_import(i).map(Decl::Import),
     }
   }
 
@@ -120,6 +122,6 @@ impl<'init> ImportQualifier<'init> {
       return Ok(qualified::Import::Val(v));
     }
 
-    Err(format!("{} cannot be imported", name).into())
+    Err(anyhow!(format!("{} cannot be imported", name)))
   }
 }
