@@ -9,8 +9,11 @@ impl GlobalDeclCollector {
     Self { decls: Vec::new() }
   }
 
-  pub fn collect(&mut self, ms: &Vec<Mod>) -> Decls {
-    ms.into_iter().for_each(|m| self.process_mod(m));
+  pub fn collect<MS>(&mut self, ms: MS) -> Decls
+  where
+    MS: Iterator<Item = Mod>,
+  {
+    ms.for_each(|m| self.process_mod(&m));
     self.decls.clone()
   }
 

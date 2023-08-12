@@ -1,6 +1,6 @@
+use anyhow::{anyhow, ensure, Result};
 use std::{
-  collections::HashMap, error::Error, fs::remove_file, path::Path,
-  process::Command,
+  collections::HashMap, fs::remove_file, path::Path, process::Command,
 };
 
 use current_platform::CURRENT_PLATFORM;
@@ -25,14 +25,11 @@ pub struct Compiler<'ctx> {
 
 struct TargetConfiguration {
   target_triple: TargetTriple,
-  link_command: fn(&String, &String) -> Command,
+  link_command: fn(&str, &str) -> Command,
 }
 
 impl TargetConfiguration {
-  fn create(
-    triple: &str,
-    link: fn(&String, &String) -> Command,
-  ) -> (&str, Self) {
+  fn create(triple: &str, link: fn(&str, &str) -> Command) -> (&str, Self) {
     (
       triple,
       TargetConfiguration {
@@ -44,13 +41,14 @@ impl TargetConfiguration {
 }
 
 impl<'ctx> Backend for Compiler<'ctx> {
-  fn run(&self) -> Result<(), Box<dyn Error>> {
+  fn run(&self) -> Result<()> {
     let target_config = self
       .target_machines
       .get(CURRENT_PLATFORM)
-      .ok_or(format!("Unknown target: {}", CURRENT_PLATFORM))?;
+      .ok_or(anyhow!("Unknown target: {}", CURRENT_PLATFORM))?;
 
-    let target = Target::from_triple(&target_config.target_triple)?;
+    let target = Target::from_triple(&target_config.target_triple)
+      .map_err(|e| anyhow!(e.to_string()))?;
 
     let target_machine = target
       .create_target_machine(
@@ -61,13 +59,11 @@ impl<'ctx> Backend for Compiler<'ctx> {
         RelocMode::Default,
         CodeModel::Default,
       )
-      .ok_or("Cannot create target machine")?;
+      .ok_or(anyhow!("Cannot create target machine"))?;
 
-    target_machine.write_to_file(
-      &self.module,
-      FileType::Object,
-      Path::new(&self.obj_file),
-    )?;
+    target_machine
+      .write_to_file(&self.module, FileType::Object, Path::new(&self.obj_file))
+      .map_err(|e| anyhow!(e.to_string()))?;
 
     let command = target_config.link_command;
 
@@ -75,9 +71,7 @@ impl<'ctx> Backend for Compiler<'ctx> {
 
     let error = String::from_utf8(output.stderr)?;
 
-    if !error.is_empty() {
-      return Err(error.into());
-    }
+    ensure!(error.is_empty(), error);
 
     remove_file(&self.obj_file)?;
 
@@ -102,13 +96,20 @@ impl<'ctx> Compiler<'ctx> {
     config: &InitializationConfig,
   ) -> HashMap<&'static str, TargetConfiguration> {
     Target::initialize_aarch64(config);
+    Target::initialize_x86(config);
+
     let mac_m1_triple = "aarch64-apple-darwin";
-    fn mac_m1_link(input: &String, output: &String) -> Command {
-      let mut c = Command::new("clang");
-      c.args([&input, "-o", &output]);
+    let linux_x86_triple = "x86_64-unknown-linux-gnu";
+
+    fn clang_link(input: &str, output: &str) -> Command {
+      let mut c = Command::new("gcc");
+      c.args(["-no-pie", "-o", output, input]);
       c
     }
 
-    HashMap::from([TargetConfiguration::create(mac_m1_triple, mac_m1_link)])
+    HashMap::from([
+      TargetConfiguration::create(mac_m1_triple, clang_link),
+      TargetConfiguration::create(linux_x86_triple, clang_link),
+    ])
   }
 }

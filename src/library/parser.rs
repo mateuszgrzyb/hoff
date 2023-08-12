@@ -4,7 +4,7 @@ use peg::*;
 use crate::library::ast::untyped::*;
 
 fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
-  Expr::BinOp(Box::new(lh), op.clone(), Box::new(rh))
+  Expr::BinOp(Box::new(lh), op, Box::new(rh))
 }
 
 // Precedence
@@ -25,10 +25,10 @@ parser! {
       = repl_decl() / repl_expr()
 
     pub rule repl_decl() -> Repl
-      = d:decl() { Repl::Def(d) }
+      = __ d:decl() __ { Repl::Def(d) }
 
     pub rule repl_expr() -> Repl
-      = e:expr() { Repl::Expr(e) }
+      = __ e:expr() __ { Repl::Expr(e) }
 
     // Compile
 
@@ -121,7 +121,25 @@ parser! {
     // String template
 
     pub rule str_temp() -> Expr
-      = "$" s:str() {? Expr::create_string_template(s) }
+      = s:__str_temp() { Expr::StringTemplate(s.0, s.1) }
+
+    rule __str_temp() -> (String, Vec<String>)
+      = "$\"" s:__str_temp_body() "\""  {
+        join_t(s)
+      }
+
+    rule __str_temp_body() -> Vec<(String, Option<&'input str>)>
+      = (__str_temp_arg() / __str_temp_ch())*
+
+    rule __str_temp_arg() -> (String, Option<&'input str>)
+      = "{" s:$([^ '}']*) "}" {
+        (format!("{{{}}}", s), Some(s))
+      }
+
+    rule __str_temp_ch() -> (String, Option<&'input str>)
+      = s:$([^ '{'|'"']+) {
+        (s.into(), None)
+      }
 
     // Lit
 
@@ -208,17 +226,15 @@ parser! {
   }
 }
 
-parser! {
-  grammar list_parser() for str {
-    pub rule number() -> u32
-      = n:$(['0'..='9']+) {? n.parse().or(Err("u32")) }
-
-    pub rule list() -> Vec<u32>
-      = "[" __ l:(number() ** (__ "," __)) __ "]" { l }
-
-    rule _ = quiet!{[' ' | '\n' | '\t']+}
-    rule __ = quiet!{[' ' | '\n' | '\t']*}
-  }
+fn join_t(ts: Vec<(String, Option<&str>)>) -> (String, Vec<String>) {
+  let (strings, args): (Vec<_>, Vec<_>) = ts.into_iter().unzip();
+  let args = args
+    .into_iter()
+    .flatten()
+    .map(|s| s.to_owned())
+    .collect::<Vec<_>>();
+  let string = strings.join("");
+  (string, args)
 }
 
 #[cfg(test)]

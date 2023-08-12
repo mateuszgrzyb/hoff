@@ -1,7 +1,9 @@
 mod utils;
 
-use std::error::Error;
+use std::rc::Rc;
 
+use anyhow::anyhow;
+use anyhow::Result;
 use inkwell::{context::Context, module::Module};
 
 use crate::library::{
@@ -28,25 +30,22 @@ impl Compile {
     }
   }
 
-  pub fn compile(&self) -> Result<(), Box<dyn Error>> {
-    let files = self.read_files()?;
+  pub fn compile(&self) -> Result<()> {
+    let files = self.read_files();
 
-    let modules = self.parse_files(files)?.into_iter();
+    let modules = self.parse_files(files);
 
     if let DumpMode::Ast = self.args.dump_mode {
       return utils::dump(&self.args, modules);
     };
 
-    let qualified_modules =
-      self.qualify_modules(modules).map(Vec::into_iter)?;
+    let qualified_modules = self.qualify_modules(modules);
 
     if let DumpMode::QualifiedAst = self.args.dump_mode {
       return utils::dump(&self.args, qualified_modules);
     };
 
-    let typed_modules = self
-      .typecheck_modules(qualified_modules)
-      .map(Vec::into_iter)?;
+    let typed_modules = self.typecheck_modules(qualified_modules);
 
     if let DumpMode::TypedAst = self.args.dump_mode {
       return utils::dump(&self.args, typed_modules);
@@ -54,9 +53,7 @@ impl Compile {
 
     let codegens = self.compile_modules(typed_modules);
 
-    if !self.args.no_verify_llvm {
-      self.verify_modules(&codegens)?
-    }
+    let codegens = self.verify_modules(codegens);
 
     if let DumpMode::LlvmIr = self.args.dump_mode {
       return utils::dump_llvm(&self.args, codegens);
@@ -73,108 +70,114 @@ impl Compile {
     Ok(())
   }
 
-  fn read_files(&self) -> Result<Vec<(String, String)>, Box<dyn Error>> {
-    self
-      .args
-      .files
-      .clone()
-      .into_iter()
-      .map(|name| {
-        std::fs::read_to_string(name.clone())
-          .map(|file| (name, file))
-          .map_err(|err| err.into())
-      })
-      .collect()
+  fn read_files(
+    &self,
+  ) -> impl Iterator<Item = Result<(String, String)>> + Clone {
+    self.args.files.clone().into_iter().map(|name| {
+      std::fs::read_to_string(name.clone())
+        .map(|file| (name, file))
+        .map_err(|err| err.into())
+    })
   }
 
-  fn parse_files(
+  fn parse_files<FS>(
     &self,
-    files: Vec<(String, String)>,
-  ) -> Result<Vec<untyped::Mod>, Box<dyn Error>> {
-    files
-      .into_iter()
-      .map(move |(name, file)| {
-        let decls = parse(&file)?;
-        let imports = ();
-        Ok(untyped::Mod {
-          name,
-          defs: decls,
-          imports,
-        })
+    files: FS,
+  ) -> impl Iterator<Item = Result<untyped::Mod>> + Clone
+  where
+    FS: Iterator<Item = Result<(String, String)>> + Clone,
+  {
+    #[allow(clippy::let_unit_value)]
+    files.map(|f| {
+      let (name, file) = f?;
+      let defs = parse(&file)?;
+      let imports = ();
+      Ok(untyped::Mod {
+        name,
+        defs,
+        imports,
       })
-      .collect()
+    })
   }
 
   fn qualify_modules<MS>(
     &self,
     ms: MS,
-  ) -> Result<Vec<qualified::Mod>, Box<dyn Error>>
+  ) -> Box<dyn Iterator<Item = Result<qualified::Mod>>>
   where
-    MS: Iterator<Item = untyped::Mod>,
+    MS: Iterator<Item = Result<untyped::Mod>> + Clone + 'static,
   {
-    let ms = ms.collect::<Vec<_>>();
-
     let mut global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
 
-    let untyped_global_decls = global_decl_collector.collect(&ms);
+    let untyped_global_decls =
+      global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
     let typed_global_decls =
-      global_decl_typechecker.check(untyped_global_decls)?;
+      match global_decl_typechecker.check(untyped_global_decls) {
+        Ok(t) => Rc::new(t),
+        Err(e) => return Box::new(std::iter::once(Err(e))),
+      };
 
-    let mut qualifier = ImportQualifier::create(&typed_global_decls);
+    let mut qualifier = ImportQualifier::create(typed_global_decls);
 
-    ms.clone()
-      .into_iter()
-      .map(|module| qualifier.qualify(module))
-      .collect()
+    Box::new(ms.map(move |module| qualifier.qualify(module?)))
   }
 
   fn typecheck_modules<QMS>(
     &self,
     qms: QMS,
-  ) -> Result<Vec<typed::Mod>, Box<dyn Error>>
+  ) -> impl Iterator<Item = Result<typed::Mod>>
   where
-    QMS: Iterator<Item = qualified::Mod>,
+    QMS: Iterator<Item = Result<qualified::Mod>>,
   {
-    qms
-      .map(|module| TypeChecker::create(module).check())
-      .collect()
+    qms.map(|module| TypeChecker::create(module?).check())
   }
 
-  fn compile_modules<TMS>(&self, tms: TMS) -> Vec<CodeGen>
-  where
-    TMS: Iterator<Item = typed::Mod>,
-  {
-    tms
-      .enumerate()
-      .map(|(i, module)| {
-        let context = &self.contexts[i];
-        let mut codegen = CodeGen::create(context, true);
-        codegen.compile_module(module);
-        codegen
-      })
-      .collect()
-  }
-
-  fn verify_modules(&self, cgs: &Vec<CodeGen>) -> Result<(), Box<dyn Error>> {
-    for c in cgs.iter() {
-      c.module.verify()?
-    }
-
-    Ok(())
-  }
-
-  fn link_modules<'ctx>(
+  fn compile_modules<TMS>(
     &self,
-    cgs: Vec<CodeGen<'ctx>>,
-  ) -> Result<Module<'ctx>, Box<dyn Error>> {
+    tms: TMS,
+  ) -> impl Iterator<Item = Result<CodeGen>>
+  where
+    TMS: Iterator<Item = Result<typed::Mod>>,
+  {
+    tms.enumerate().map(|(i, module)| {
+      let context = &self.contexts[i];
+      let mut codegen = CodeGen::create(context, true);
+      codegen.compile_module(module?);
+      Ok(codegen)
+    })
+  }
+
+  fn verify_modules<'ctx, 'a, CGS>(
+    &'a self,
+    cgs: CGS,
+  ) -> impl Iterator<Item = Result<CodeGen<'ctx>>> + 'a
+  where
+    CGS: Iterator<Item = Result<CodeGen<'ctx>>> + 'a,
+  {
+    cgs.map(move |c| {
+      let c = c?;
+
+      if !self.args.no_verify_llvm {
+        c.module.verify().map_err(|e| anyhow!(e.to_string()))?;
+      };
+
+      Ok(c)
+    })
+  }
+
+  fn link_modules<'ctx, CGS>(&self, cgs: CGS) -> Result<Module<'ctx>>
+  where
+    CGS: Iterator<Item = Result<CodeGen<'ctx>>>,
+  {
     cgs
-      .into_iter()
-      .map(|codegen| codegen.module)
-      .reduce(|m1, m2| {
+      .map(|codegen| Ok(codegen?.module))
+      .reduce(|m1: Result<Module>, m2| {
+        let m1 = m1?;
+        let m2 = m2?;
         m1.link_in_module(m2).unwrap();
-        m1
+        Ok(m1)
       })
-      .ok_or_else(|| "No files were compiled".into())
+      .ok_or_else(|| anyhow!("No files were compiled"))?
   }
 }

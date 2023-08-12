@@ -1,4 +1,5 @@
-use std::{collections::HashMap, error::Error};
+use anyhow::{bail, Result};
+use std::collections::HashMap;
 
 use crate::library::{ast::untyped, qualify::Nameable};
 
@@ -89,7 +90,7 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
     }
   }
 
-  pub fn sort(&mut self) -> Result<Vec<T>, Box<dyn Error>> {
+  pub fn sort(&mut self) -> Result<Vec<T>> {
     loop {
       let marks = self.marks.clone();
 
@@ -105,10 +106,10 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
     }
   }
 
-  fn visit(&mut self, node: &MarkedNode<T>) -> Result<(), Box<dyn Error>> {
+  fn visit(&mut self, node: &MarkedNode<T>) -> Result<()> {
     match node.mark {
       Mark::Perm => return Ok(()),
-      Mark::Temp => return Err("cyclic reference found".into()),
+      Mark::Temp => bail!("cyclic reference found"),
       Mark::None => {
         let elem = node.elem.clone();
 

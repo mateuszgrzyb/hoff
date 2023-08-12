@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   main:
+    image: hoff:latest
     build:
       dockerfile: Dockerfile
       context: .
@@ -9,6 +10,24 @@ services:
     volumes:
       - ./:/app
       - build:/app/target
+
+  release:
+    image: hoff-release:latest
+    build:
+      dockerfile: release.Dockerfile
+      context: .
+    tty: true
+    depends_on:
+      - main
+
+  installer:
+    build:
+      dockerfile: installer.Dockerfile
+      context: .
+    tty: true
+    depends_on:
+      - release
+
 
 volumes:
   build:

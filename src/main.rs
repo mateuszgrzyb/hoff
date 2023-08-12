@@ -1,16 +1,16 @@
+#![allow(clippy::upper_case_acronyms)]
 extern crate core;
-
-use std::error::Error;
 
 use clap::Parser;
 
 use crate::{compile::Compile, library::cli::Args, repl::REPL};
+use anyhow::Result;
 
 mod compile;
 mod library;
 mod repl;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
   let args: Args = Args::parse();
 
   if args.repl {

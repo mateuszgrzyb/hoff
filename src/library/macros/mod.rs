@@ -1,10 +1,8 @@
 #[macro_export]
 macro_rules! nameable {
   ( $( $T:ty ),* ) => {
-    use $crate::library::qualify::Nameable;
-
     $(
-      impl Nameable for $T {
+      impl $crate::library::qualify::Nameable for $T {
         fn get_name(&self) -> String {
           self.name.clone()
         }

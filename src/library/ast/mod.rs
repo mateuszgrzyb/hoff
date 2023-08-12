@@ -1,5 +1,3 @@
-use crate::library::utils::STRING_TEMPLATE_RE;
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Op {
   Add,
@@ -27,54 +25,18 @@ pub enum Lit {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<T, C, S, TN> {
-  BinOp(Box<Expr<T, C, S, TN>>, Op, Box<Expr<T, C, S, TN>>),
+  BinOp(Box<Self>, Op, Box<Self>),
   Lit(Lit),
   Value(String),
   Function(Box<Fun<T, C, S, TN>>, C),
-  Assign((String, Type<T>), Box<Expr<T, C, S, TN>>),
-  Chain(Box<Expr<T, C, S, TN>>, Box<Expr<T, C, S, TN>>),
-  Call(String, Vec<Expr<T, C, S, TN>>),
-  If(
-    Box<Expr<T, C, S, TN>>,
-    Box<Expr<T, C, S, TN>>,
-    Box<Expr<T, C, S, TN>>,
-  ),
+  Assign((String, Type<T>), Box<Self>),
+  Chain(Box<Self>, Box<Self>),
+  Call(String, Vec<Self>),
+  If(Box<Self>, Box<Self>, Box<Self>),
   Attr(String, S, String),
-  New(String, Vec<Expr<T, C, S, TN>>),
+  New(String, Vec<Self>),
   StringTemplate(String, Vec<String>),
-  MethodCall(Box<Expr<T, C, S, TN>>, TN, String, Vec<Expr<T, C, S, TN>>),
-}
-
-impl<T, C, S, TN> Expr<T, C, S, TN> {
-  pub fn create_string_template(
-    template: String,
-  ) -> Result<Self, &'static str> {
-    let mut args = Vec::new();
-
-    let mut inside = false;
-
-    for char in template.chars() {
-      match (char, inside) {
-        ('{', false) => {
-          inside = true;
-        }
-        ('{', true) => return Err("string template error: begin"),
-        ('}', false) => return Err("string template error: end"),
-        ('}', true) => {
-          inside = false;
-        }
-        _ => {}
-      }
-    }
-
-    for capture in STRING_TEMPLATE_RE.captures_iter(template.as_str()) {
-      if let Some(matched) = capture.get(1) {
-        args.push(matched.as_str().to_string());
-      }
-    }
-
-    Ok(Self::StringTemplate(template, args))
-  }
+  MethodCall(Box<Self>, TN, String, Vec<Self>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -159,7 +121,7 @@ pub enum Repl<T, C, S, TN, I> {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Type<T> {
   Simple(T),
-  Function(Vec<Type<T>>),
+  Function(Vec<Self>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -168,7 +130,7 @@ pub enum SimpleType {
   Bool,
   Float,
   String,
-  Struct(Struct<SimpleType>),
+  Struct(Struct<Self>),
   This,
 }
 
@@ -208,96 +170,93 @@ impl<T> Decl<T> {
 
 pub type Decls<T> = Vec<Decl<T>>;
 
+macro_rules! ast {
+  (
+    T = $T:ty,
+    C = $C:ty,
+    S = $S:ty,
+    TN = $TN:ty,
+    I = $I:ty,
+    IS = $IS:ty,
+  ) => {
+    #[allow(dead_code)]
+    pub type Op = super::Op;
+    #[allow(dead_code)]
+    pub type Lit = super::Lit;
+    pub type Expr = super::Expr<$T, $C, $S, $TN>;
+    #[allow(dead_code)]
+    pub type FunSig = super::FunSig<$T>;
+    pub type Fun = super::Fun<$T, $C, $S, $TN>;
+    pub type Struct = super::Struct<$T>;
+    #[allow(dead_code)]
+    pub type ValDecl = super::ValDecl<$T>;
+    pub type Val = super::Val<$T, $C, $S, $TN>;
+    pub type Class = super::Class<$T>;
+    pub type Impl = super::Impl<$T, $C, $S, $TN>;
+    pub type Import = $I;
+    #[allow(dead_code)]
+    pub type Imports = $IS;
+    pub type Def = super::Def<$T, $C, $S, $TN, $I>;
+    pub type Mod = super::Mod<$T, $C, $S, $TN, $I, $IS>;
+    #[allow(dead_code)]
+    pub type Repl = super::Repl<$T, $C, $S, $TN, $I>;
+    pub type Type = super::Type<$T>;
+    #[allow(dead_code)]
+    pub type SimpleType = super::SimpleType;
+    #[allow(dead_code)]
+    pub type Closure = super::Closure;
+    pub type Decl = super::Decl<$T>;
+    pub type Decls = super::Decls<$T>;
+  };
+}
+
 #[allow(unused_imports, dead_code)]
 pub mod untyped {
+  use crate::library::qualify::Nameable;
   use crate::nameable;
 
-  type T = String;
-  type C = ();
-  type S = ();
-  type TN = ();
-  type I = (Vec<String>, String);
-  type IS = ();
-
-  pub use super::*;
-
-  pub type Expr = super::Expr<T, C, S, TN>;
-  pub type Fun = super::Fun<T, C, S, TN>;
-  pub type FunSig = super::FunSig<T>;
-  pub type Struct = super::Struct<T>;
-  pub type Val = super::Val<T, C, S, TN>;
-  pub type ValDecl = super::ValDecl<T>;
-  pub type Class = super::Class<T>;
-  pub type Impl = super::Impl<T, C, S, TN>;
-  pub type Import = I;
-  pub type Def = super::Def<T, C, S, TN, I>;
-  pub type Mod = super::Mod<T, C, S, TN, I, IS>;
-  pub type Repl = super::Repl<T, C, S, TN, I>;
-  pub type Type = super::Type<T>;
-  pub type Decl = super::Decl<T>;
-  pub type Decls = super::Decls<T>;
+  ast!(
+    T = String,
+    C = (),
+    S = (),
+    TN = (),
+    I = (Vec<String>, String),
+    IS = (),
+  );
 
   nameable! {Mod, Struct, ValDecl}
 }
 
 #[allow(unused_imports, dead_code)]
 pub mod qualified {
+  use crate::library::qualify::Nameable;
   use crate::nameable;
 
-  type T = String;
-  type C = ();
-  type S = ();
-  type TN = ();
-  type I = Decl<SimpleType>;
-  type IS = Decls<SimpleType>;
-
-  pub use super::*;
-
-  pub type Expr = super::Expr<T, C, S, TN>;
-  pub type Fun = super::Fun<T, C, S, TN>;
-  pub type FunSig = super::FunSig<T>;
-  pub type Struct = super::Struct<T>;
-  pub type Val = super::Val<T, C, S, TN>;
-  pub type ValDecl = super::ValDecl<T>;
-  pub type Class = super::Class<T>;
-  pub type Impl = super::Impl<T, C, S, TN>;
-  pub type Import = I;
-  pub type Def = super::Def<T, C, S, TN, I>;
-  pub type Mod = super::Mod<T, C, S, TN, I, IS>;
-  pub type Repl = super::Repl<T, C, S, TN, I>;
-  pub type Type = super::Type<T>;
+  ast!(
+    T = String,
+    C = (),
+    S = (),
+    TN = (),
+    I = super::Decl<super::SimpleType>,
+    IS = super::Decls<super::SimpleType>,
+  );
 
   nameable! {Mod}
 }
 
 #[allow(unused_imports, dead_code)]
 pub mod typed {
+  use crate::library::qualify::Nameable;
   use crate::nameable;
 
-  type T = SimpleType;
-  type C = Closure;
-  type S = Struct;
-  type TN = String;
-  type I = super::Decl<SimpleType>;
-  type IS = super::Decls<SimpleType>;
-
-  pub use super::*;
-
-  pub type Expr = super::Expr<T, C, S, TN>;
-  pub type Fun = super::Fun<T, C, S, TN>;
-  pub type FunSig = super::FunSig<T>;
-  pub type Struct = super::Struct<T>;
-  pub type Val = super::Val<T, C, S, TN>;
-  pub type ValDecl = super::ValDecl<T>;
-  pub type Class = super::Class<T>;
-  pub type Impl = super::Impl<T, C, S, TN>;
-  pub type Import = I;
-  pub type Def = super::Def<T, C, S, TN, I>;
-  pub type Mod = super::Mod<T, C, S, TN, I, IS>;
-  pub type Repl = super::Repl<T, C, S, TN, I>;
-  pub type Type = super::Type<T>;
-  pub type Decl = super::Decl<T>;
-  pub type Decls = super::Decls<T>;
+  ast!(
+    T = super::SimpleType,
+    C = super::Closure,
+    S = super::Struct<super::SimpleType>,
+    TN = String,
+    I = super::Decl<super::SimpleType>,
+    IS = super::Decls<super::SimpleType>,
+  );
 
   nameable! {Mod}
 

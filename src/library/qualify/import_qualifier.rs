@@ -1,16 +1,17 @@
-use std::error::Error;
+use std::rc::Rc;
 
-use crate::library::ast::{qualified, typed, untyped, Def, Mod};
+use crate::library::ast::{qualified, typed, untyped};
+use anyhow::bail;
+use anyhow::Result;
 
-type QualifyResult<V> = Result<V, Box<dyn Error>>;
-
-pub struct ImportQualifier<'init> {
-  global_decls: &'init typed::Decls,
+type QualifyResult<V> = Result<V>;
+pub struct ImportQualifier {
+  global_decls: Rc<typed::Decls>,
   decls: typed::Decls,
 }
 
-impl<'init> ImportQualifier<'init> {
-  pub fn create(global_decls: &'init typed::Decls) -> Self {
+impl ImportQualifier {
+  pub fn create(global_decls: Rc<typed::Decls>) -> Self {
     Self {
       global_decls,
       decls: Vec::new(),
@@ -22,7 +23,7 @@ impl<'init> ImportQualifier<'init> {
     let decls = self.qualify_decls(m.defs)?;
     let imports = self.decls.clone();
 
-    Ok(Mod {
+    Ok(qualified::Mod {
       name,
       defs: decls,
       imports,
@@ -44,13 +45,14 @@ impl<'init> ImportQualifier<'init> {
     d: untyped::Def,
   ) -> QualifyResult<qualified::Def> {
     match d {
-      Def::Import(i) => self.qualify_import(i).map(|i| Def::Import(i)),
-
-      Def::Fun(f) => Ok(Def::Fun(f)),
-      Def::Struct(s) => Ok(Def::Struct(s)),
-      Def::Val(v) => Ok(Def::Val(v)),
-      Def::Class(c) => Ok(Def::Class(c)),
-      Def::Impl(i) => Ok(Def::Impl(i)),
+      untyped::Def::Import(i) => {
+        self.qualify_import(i).map(|i| qualified::Def::Import(i))
+      }
+      untyped::Def::Fun(f) => Ok(qualified::Def::Fun(f)),
+      untyped::Def::Struct(s) => Ok(qualified::Def::Struct(s)),
+      untyped::Def::Val(v) => Ok(qualified::Def::Val(v)),
+      untyped::Def::Class(c) => Ok(qualified::Def::Class(c)),
+      untyped::Def::Impl(i) => Ok(qualified::Def::Impl(i)),
     }
   }
 
@@ -61,7 +63,7 @@ impl<'init> ImportQualifier<'init> {
     let (_, name) = i;
 
     let Some(d) = self.global_decls.iter().find(|d| d.get_name() == &name).cloned() else {
-      return Err(format!("{} cannot be imported", name).into())
+      bail!("{} cannot be imported", name);
     };
 
     self.decls.push(d.clone());
