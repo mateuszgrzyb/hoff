@@ -16,7 +16,7 @@ pub struct Interpreter<'ctx> {
   qualifier: ImportQualifier,
   codegen: CodeGen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
-  decls: Vec<untyped::Def>,
+  defs: Vec<untyped::Def>,
 }
 
 impl<'ctx> Interpreter<'ctx> {
@@ -39,7 +39,7 @@ impl<'ctx> Interpreter<'ctx> {
       qualifier: import_qualifier,
       codegen,
       execution_engine,
-      decls: Vec::new(),
+      defs: Vec::new(),
     }
   }
 
@@ -82,9 +82,9 @@ impl<'ctx> Interpreter<'ctx> {
     Ok(return_value_repr)
   }
 
-  fn eval_decl(&mut self, decl: untyped::Def) -> Result<String> {
-    let sig = format!("{:?}", decl);
-    self.decls.push(decl);
+  fn eval_decl(&mut self, def: untyped::Def) -> Result<String> {
+    let sig = format!("{:?}", def);
+    self.defs.push(def);
     Ok(sig)
   }
 
@@ -102,15 +102,15 @@ impl<'ctx> Interpreter<'ctx> {
       body,
     };
 
-    let decls = self.decls.clone();
-    let decls = self.qualifier.qualify_decls(decls)?;
-    let mut decls = self.typechecker.typecheck_decls(decls)?;
+    let defs = self.defs.clone();
+    let defs = self.qualifier.qualify_defs(defs)?;
+    let mut defs = self.typechecker.typecheck_defs(defs)?;
 
-    decls.push(typed::Def::Fun(main));
+    defs.push(typed::Def::Fun(main));
 
     Ok(typed::Mod {
       name: "repl".to_string(),
-      defs: decls,
+      defs,
       imports: typed::Decls::default(),
     })
   }

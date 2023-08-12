@@ -154,9 +154,7 @@ impl TypeChecker {
     let Type::Simple(t) = this.t else { return None };
     self
       .methods
-      .get(
-        t.get_method_name(&method).as_str(), //get_method_name(&t, &method).as_str()
-      )
+      .get(t.get_method_name(&method).as_str())
       .cloned()
   }
 
@@ -189,26 +187,26 @@ impl TypeChecker {
 
   pub fn check(&mut self) -> Result<typed::Mod> {
     let name = self.module.name.clone();
-    let decls = self.typecheck_decls(self.module.defs.clone())?;
+    let defs = self.typecheck_defs(self.module.defs.clone())?;
     let imports = self.module.imports.clone();
 
     Ok(Mod {
       name,
-      defs: decls,
+      defs,
       imports,
     })
   }
 
-  pub fn typecheck_decls(
+  pub fn typecheck_defs(
     &mut self,
     ds: Vec<qualified::Def>,
   ) -> Result<Vec<typed::Def>> {
     ds.into_iter()
-      .map(|d| self.typecheck_decl(d))
+      .map(|d| self.typecheck_def(d))
       .collect::<Result<_, _>>()
   }
 
-  fn typecheck_decl(&mut self, d: qualified::Def) -> ValueResult<typed::Def> {
+  fn typecheck_def(&mut self, d: qualified::Def) -> ValueResult<typed::Def> {
     match d {
       Def::Fun(f) => self.typecheck_fun(f).map(|f| Def::Fun(f.v)),
       Def::Struct(s) => self.typecheck_struct(s).map(|s| Def::Struct(s)),
@@ -382,11 +380,7 @@ impl TypeChecker {
     };
 
     for i in impls.clone() {
-      self.methods.insert(
-        //get_method_name(&t, &i.sig.name),
-        t.get_method_name(&i.sig.name),
-        i.sig,
-      );
+      self.methods.insert(t.get_method_name(&i.sig.name), i.sig);
     }
 
     self.type_impl = None;
@@ -699,9 +693,6 @@ impl TypeChecker {
     name: String,
     attr: String,
   ) -> CheckResult<(String, typed::Struct, String)> {
-    // TODO: this exists, but has type This here...
-    //let Some(Type::Simple(SimpleType::Struct(struct_))) = self.values.get(name.as_str()) else {
-
     let struct_ = match (self.get_value(name.clone())?, &self.type_impl) {
       (Type::Simple(SimpleType::Struct(struct_)), _) => struct_,
       (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => {

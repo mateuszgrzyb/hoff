@@ -20,30 +20,27 @@ impl ImportQualifier {
 
   pub fn qualify(&mut self, m: untyped::Mod) -> QualifyResult<qualified::Mod> {
     let name = m.name;
-    let decls = self.qualify_decls(m.defs)?;
+    let defs = self.qualify_defs(m.defs)?;
     let imports = self.decls.clone();
 
     Ok(qualified::Mod {
       name,
-      defs: decls,
+      defs,
       imports,
     })
   }
 
-  pub fn qualify_decls(
+  pub fn qualify_defs(
     &mut self,
-    decls: Vec<untyped::Def>,
+    defs: Vec<untyped::Def>,
   ) -> QualifyResult<Vec<qualified::Def>> {
-    decls
+    defs
       .into_iter()
-      .map(|d| self.qualify_decl(d))
+      .map(|d| self.qualify_def(d))
       .collect::<Result<Vec<_>, _>>()
   }
 
-  fn qualify_decl(
-    &mut self,
-    d: untyped::Def,
-  ) -> QualifyResult<qualified::Def> {
+  fn qualify_def(&mut self, d: untyped::Def) -> QualifyResult<qualified::Def> {
     match d {
       untyped::Def::Import(i) => {
         self.qualify_import(i).map(|i| qualified::Def::Import(i))
