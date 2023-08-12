@@ -1,21 +1,22 @@
 mod closure_manager;
+mod instantiate;
 mod namespace;
 
-use anyhow::anyhow;
-use anyhow::ensure;
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use std::collections::HashMap;
 
-use anyhow::bail;
 use closure_manager::ClosureManager;
 use namespace::Namespace;
 use regex::Captures;
 
-use crate::library::ast::typed::get_method_name;
+use crate::library::typecheck::instantiate::Instantiate;
+
 use crate::library::{
   ast::{qualified, typed, *},
   utils::STRING_TEMPLATE_RE,
 };
+
+use crate::library::utils::MethodNamer;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedValue<V, T> {
@@ -133,8 +134,11 @@ impl TypeChecker {
       return Ok(c.clone());
     }
 
-    if let Some(Decl::Class(c)) =
-      self.module.imports.iter().find(|c| c.get_name().as_str() == name)
+    if let Some(Decl::Class(c)) = self
+      .module
+      .imports
+      .iter()
+      .find(|c| c.get_name().as_str() == name)
     {
       return Ok(c.clone());
     }
@@ -150,7 +154,9 @@ impl TypeChecker {
     let Type::Simple(t) = this.t else { return None };
     self
       .methods
-      .get(get_method_name(&t, &method).as_str())
+      .get(
+        t.get_method_name(&method).as_str(), //get_method_name(&t, &method).as_str()
+      )
       .cloned()
   }
 
@@ -372,15 +378,15 @@ impl TypeChecker {
     impl_sigs.sort_by_key(|m| m.name.clone());
 
     if class_sigs != impl_sigs {
-      bail!(
-        "Wrong implementations: {:?}, {:?}",
-        class_sigs,
-        impl_sigs,
-      );
+      bail!("Wrong implementations: {:?}, {:?}", class_sigs, impl_sigs,);
     };
 
     for i in impls.clone() {
-      self.methods.insert(get_method_name(&t, &i.sig.name), i.sig);
+      self.methods.insert(
+        //get_method_name(&t, &i.sig.name),
+        t.get_method_name(&i.sig.name),
+        i.sig,
+      );
     }
 
     self.type_impl = None;
@@ -504,7 +510,7 @@ impl TypeChecker {
     let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
       bail!(
         "Cannot run binary operation on functions: lh: {:?}, rh: {:?}", 
-        lh.t, 
+        lh.t,
         rh.t,
       );
     };
@@ -702,16 +708,13 @@ impl TypeChecker {
         struct_.clone()
       }
       _ => {
-        bail!(
-          "Struct `{}` does not exist.",
-          name
-        );
+        bail!("Struct `{}` does not exist.", name);
       }
     };
 
     let Some((_, type_)) = struct_.clone().args.into_iter().find(|(n, _)| n == &attr) else {
       bail!(
-        "Struct `{}` does not have attribute `{}`."
+        "Struct `{}` does not have attribute `{}`.",
         name,
         attr,
       );

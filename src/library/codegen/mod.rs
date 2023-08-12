@@ -16,7 +16,9 @@ use inkwell::{
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
-use crate::library::{ast::typed::*, codegen::types::Types};
+use crate::library::{
+  ast::typed::*, codegen::types::Types, utils::MethodNamer,
+};
 
 pub struct CodeGen<'ctx> {
   context: &'ctx Context,
@@ -308,7 +310,8 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn _prepare_impl_fun(&mut self, impl_: &Impl, f: Fun) -> Fun {
-    let name = get_method_name(&impl_.t, &f.sig.name);
+    //let name = get_method_name(&impl_.t, &f.sig.name);
+    let name = impl_.t.get_method_name(&f.sig.name);
     let args = f.sig.args;
     let rt = f.sig.rt;
 
@@ -674,7 +677,8 @@ impl<'ctx> CodeGen<'ctx> {
     method: String,
     args: Vec<Expr>,
   ) -> Value<'ctx> {
-    let name = get_method_name_by_tname(tname, method);
+    //let name = get_method_name_by_tname(tname, method);
+    let name = tname.get_method_name(&method);
     let mut args = args.clone();
     args.insert(0, this);
     self.compile_call(name, args)
