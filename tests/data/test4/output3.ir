@@ -1,7 +1,7 @@
 ; ModuleID = 'tests/data/test4/input3.hff'
 source_filename = "tests/data/test4/input3.hff.ir"
 
-%Student.0 = type <{ i8*, i32 }>
+%Student = type <{ i8*, i32 }>
 
 declare i32 @puts(i8*)
 
@@ -9,10 +9,10 @@ declare i32 @sprintf(i8*, i8*, ...)
 
 define %Student.0* @create_student(i8* %name, i32 %age) {
 entry:
-  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student.0* getelementptr (%Student.0, %Student.0* null, i32 1) to i32))
-  %malloc = bitcast i8* %malloccall to %Student.0*
-  store %Student.0 <{ i8* %name, i32 %age }>, %Student.0* %malloc, align 1
-  ret %Student.0* %malloc
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student* getelementptr (%Student, %Student* null, i32 1) to i32))
+  %malloc = bitcast i8* %malloccall to %Student*
+  store %Student <{ i8* %name, i32 %age }>, %Student* %malloc, align 1
+  ret %Student* %malloc
 }
 
 declare noalias i8* @malloc(i32)

@@ -1,9 +1,8 @@
 use std::{fmt::Debug, fs::write};
 
-use inkwell::context::Context;
+use anyhow::{anyhow, Result};
 
-use anyhow::anyhow;
-use anyhow::Result;
+use rayon::prelude::*;
 
 use crate::library::{
   cli::{Args, DumpTarget},
@@ -14,16 +13,18 @@ use crate::library::{
 pub fn dump<I, IS>(args: &Args, is: IS) -> Result<()>
 where
   I: Debug + Nameable,
-  IS: Iterator<Item = Result<I>>,
+  IS: ParallelIterator<Item = Result<I>>,
 {
-  for i in is {
+  is.try_for_each(|i: Result<I>| -> Result<()> {
     let i = i?;
     let contents = format!("{:#?}", i);
     match args.dump_target {
       DumpTarget::File => write(i.get_name(), contents)?,
       DumpTarget::StdOut => println!("{contents}"),
     }
-  }
+
+    Ok(())
+  })?;
 
   Ok(())
 }
@@ -48,12 +49,4 @@ where
   }
 
   Ok(())
-}
-
-pub fn initialize_contexts(n: usize) -> Vec<Context> {
-  let mut contexts = Vec::new();
-  for _ in 0..n {
-    contexts.push(Context::create())
-  }
-  contexts
 }

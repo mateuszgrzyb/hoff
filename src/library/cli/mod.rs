@@ -61,4 +61,9 @@ pub struct Args {
   /// Choose program execution mode
   #[arg(short = 'm', long, value_enum, default_value_t = RunMode::Compile)]
   pub mode: RunMode,
+
+  /// Number of threads used in compilation
+  /// If set to zero, all threads are used
+  #[arg(long, default_value_t = 0)]
+  pub threads: usize,
 }

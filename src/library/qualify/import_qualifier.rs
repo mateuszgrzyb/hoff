@@ -1,26 +1,25 @@
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::library::ast::{qualified, typed, untyped};
-use anyhow::bail;
-use anyhow::Result;
-
+use anyhow::{bail, Result};
+use rayon::prelude::*;
 pub struct ImportQualifier {
-  global_decls: Rc<typed::Decls>,
-  decls: typed::Decls,
+  global_decls: Arc<typed::Decls>,
+  decls: Arc<Mutex<typed::Decls>>,
 }
 
 impl ImportQualifier {
-  pub fn create(global_decls: Rc<typed::Decls>) -> Self {
+  pub fn create(global_decls: Arc<typed::Decls>) -> Self {
     Self {
       global_decls,
-      decls: Vec::new(),
+      decls: Arc::new(Mutex::new(Vec::new())),
     }
   }
 
-  pub fn qualify(&mut self, m: untyped::Mod) -> Result<qualified::Mod> {
+  pub fn qualify(&self, m: untyped::Mod) -> Result<qualified::Mod> {
     let name = m.name;
     let defs = self.qualify_defs(m.defs)?;
-    let imports = self.decls.clone();
+    let imports = self._get_decls();
 
     Ok(qualified::Mod {
       name,
@@ -30,16 +29,16 @@ impl ImportQualifier {
   }
 
   pub fn qualify_defs(
-    &mut self,
+    &self,
     defs: Vec<untyped::Def>,
   ) -> Result<Vec<qualified::Def>> {
     defs
-      .into_iter()
+      .into_par_iter()
       .map(|d| self.qualify_def(d))
       .collect::<Result<Vec<_>, _>>()
   }
 
-  fn qualify_def(&mut self, d: untyped::Def) -> Result<qualified::Def> {
+  fn qualify_def(&self, d: untyped::Def) -> Result<qualified::Def> {
     match d {
       untyped::Def::Import(i) => {
         self.qualify_import(i).map(qualified::Def::Import)
@@ -52,10 +51,7 @@ impl ImportQualifier {
     }
   }
 
-  fn qualify_import(
-    &mut self,
-    i: untyped::Import,
-  ) -> Result<qualified::Import> {
+  fn qualify_import(&self, i: untyped::Import) -> Result<qualified::Import> {
     let (_, name) = i;
 
     let Some(d) = self.global_decls.iter().find(|d| d.get_name() == &name).cloned() else {
@@ -76,13 +72,11 @@ impl ImportQualifier {
         .collect::<Vec<_>>();
       // TODO: OPTIMIZE PLZ, WHAT EVEN IS THIS YOU LAZY !!!
       for class_impl in class_impls {
-        if !self.decls.contains(&class_impl) {
-          self.decls.push(class_impl)
-        }
+        self._push_decl_if_not_exist(class_impl)
       }
     };
 
-    self.decls.push(d.clone());
+    self._push_decl(d.clone());
 
     let i = match d {
       typed::Decl::Fun(f) => qualified::Import::Fun(f),
@@ -93,5 +87,22 @@ impl ImportQualifier {
     };
 
     Ok(i)
+  }
+
+  fn _push_decl_if_not_exist(&self, d: typed::Decl) {
+    let mut decls = self.decls.lock().unwrap();
+    if !decls.contains(&d) {
+      decls.push(d);
+    }
+  }
+
+  fn _push_decl(&self, d: typed::Decl) {
+    let mut decls = self.decls.lock().unwrap();
+    decls.push(d);
+  }
+
+  fn _get_decls(&self) -> typed::Decls {
+    let decls = self.decls.lock().unwrap();
+    decls.clone()
   }
 }

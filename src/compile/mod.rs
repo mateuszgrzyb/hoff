@@ -1,10 +1,10 @@
 mod utils;
 
-use std::rc::Rc;
+use std::sync::Arc;
 
-use anyhow::anyhow;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use inkwell::{context::Context, module::Module};
+use rayon::prelude::*;
 
 use crate::library::{
   ast::{qualified, typed, untyped},
@@ -18,16 +18,13 @@ use crate::library::{
 
 pub struct Compile {
   args: Args,
-  contexts: Vec<Context>,
+  context: Context,
 }
 
 impl Compile {
   pub fn create(args: Args) -> Self {
-    let no_of_files = args.files.len();
-    Self {
-      args,
-      contexts: utils::initialize_contexts(no_of_files),
-    }
+    let context = Context::create();
+    Self { args, context }
   }
 
   pub fn compile(&self) -> Result<()> {
@@ -39,7 +36,25 @@ impl Compile {
       return utils::dump(&self.args, modules);
     };
 
-    let qualified_modules = self.qualify_modules(modules);
+    //let qualified_modules = self.qualify_modules(modules);
+
+    let qualified_modules = {
+      let global_decl_collector = GlobalDeclCollector::create();
+      let mut global_decl_typechecker = GlobalDeclTypechecker::create();
+
+      let untyped_global_decls =
+        global_decl_collector.collect(modules.clone().filter_map(|m| m.ok()));
+
+      let typed_global_decls =
+        match global_decl_typechecker.check(untyped_global_decls) {
+          Ok(t) => Arc::new(t),
+          Err(e) => return Err(e),
+        };
+
+      let qualifier = ImportQualifier::create(typed_global_decls);
+
+      modules.map(move |module| qualifier.qualify(module?))
+    };
 
     if let DumpMode::QualifiedAst = self.args.dump_mode {
       return utils::dump(&self.args, qualified_modules);
@@ -72,8 +87,8 @@ impl Compile {
 
   fn read_files(
     &self,
-  ) -> impl Iterator<Item = Result<(String, String)>> + Clone {
-    self.args.files.clone().into_iter().map(|name| {
+  ) -> impl ParallelIterator<Item = Result<(String, String)>> + Clone {
+    self.args.files.clone().into_par_iter().map(|name| {
       std::fs::read_to_string(name.clone())
         .map(|file| (name, file))
         .map_err(|err| err.into())
@@ -83,9 +98,9 @@ impl Compile {
   fn parse_files<FS>(
     &self,
     files: FS,
-  ) -> impl Iterator<Item = Result<untyped::Mod>> + Clone
+  ) -> impl ParallelIterator<Item = Result<untyped::Mod>> + Clone
   where
-    FS: Iterator<Item = Result<(String, String)>> + Clone,
+    FS: ParallelIterator<Item = Result<(String, String)>> + Clone,
   {
     #[allow(clippy::let_unit_value)]
     files.map(|f| {
@@ -100,12 +115,13 @@ impl Compile {
     })
   }
 
+  /*
   fn qualify_modules<MS>(
     &self,
     ms: MS,
-  ) -> Box<dyn Iterator<Item = Result<qualified::Mod>>>
+  ) -> impl ParallelIterator<Item = Result<qualified::Mod>>
   where
-    MS: Iterator<Item = Result<untyped::Mod>> + Clone + 'static,
+    MS: ParallelIterator<Item = Result<untyped::Mod>> + Clone + 'static,
   {
     let mut global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
@@ -115,20 +131,21 @@ impl Compile {
     let typed_global_decls =
       match global_decl_typechecker.check(untyped_global_decls) {
         Ok(t) => Rc::new(t),
-        Err(e) => return Box::new(std::iter::once(Err(e))),
+        Err(e) => return rayon::iter::once(Err(e)),
       };
 
     let mut qualifier = ImportQualifier::create(typed_global_decls);
 
-    Box::new(ms.map(move |module| qualifier.qualify(module?)))
+    ms.map(move |module| qualifier.qualify(module?))
   }
+   */
 
   fn typecheck_modules<QMS>(
     &self,
     qms: QMS,
-  ) -> impl Iterator<Item = Result<typed::Mod>>
+  ) -> impl ParallelIterator<Item = Result<typed::Mod>>
   where
-    QMS: Iterator<Item = Result<qualified::Mod>>,
+    QMS: ParallelIterator<Item = Result<qualified::Mod>>,
   {
     qms.map(|module| TypeChecker::create(module?).check())
   }
@@ -138,11 +155,12 @@ impl Compile {
     tms: TMS,
   ) -> impl Iterator<Item = Result<CodeGen>>
   where
-    TMS: Iterator<Item = Result<typed::Mod>>,
+    TMS: ParallelIterator<Item = Result<typed::Mod>>,
   {
-    tms.enumerate().map(|(i, module)| {
-      let context = &self.contexts[i];
-      let mut codegen = CodeGen::create(context, true);
+    let evaluated_tms = tms.collect::<Vec<_>>();
+
+    evaluated_tms.into_iter().map(|module| {
+      let mut codegen = CodeGen::create(&self.context, true);
       codegen.compile_module(module?);
       Ok(codegen)
     })
@@ -175,7 +193,7 @@ impl Compile {
       .reduce(|m1: Result<Module>, m2| {
         let m1 = m1?;
         let m2 = m2?;
-        m1.link_in_module(m2).unwrap();
+        m1.link_in_module(m2).map_err(|e| anyhow!(e.to_string()))?;
         Ok(m1)
       })
       .ok_or_else(|| anyhow!("No files were compiled"))?

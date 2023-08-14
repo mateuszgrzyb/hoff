@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use inkwell::{context::Context, execution_engine::ExecutionEngine};
@@ -21,7 +21,7 @@ pub struct Interpreter<'ctx> {
 
 impl<'ctx> Interpreter<'ctx> {
   pub fn create(
-    global_decls: Rc<typed::Decls>,
+    global_decls: Arc<typed::Decls>,
     context: &'ctx Context,
     opt_level: u32,
   ) -> Self {
