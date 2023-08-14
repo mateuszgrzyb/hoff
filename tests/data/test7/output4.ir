@@ -13,7 +13,7 @@ declare i8* @"Struct<Student>$(method)$print"(%Student*)
 
 define i32 @main() {
 entry:
-  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student.0* getelementptr (%Student, %Student* null, i32 1) to i32))
+  %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student* getelementptr (%Student, %Student* null, i32 1) to i32))
   %malloc = bitcast i8* %malloccall to %Student*
   store %Student <{ i8* getelementptr inbounds ([5 x i8], [5 x i8]* @0, i32 0, i32 0), i32 33 }>, %Student* %malloc, align 1
   %call = call i8* @"Struct<Student>$(method)$print"(%Student* %malloc)

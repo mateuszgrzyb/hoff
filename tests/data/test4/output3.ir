@@ -7,7 +7,7 @@ declare i32 @puts(i8*)
 
 declare i32 @sprintf(i8*, i8*, ...)
 
-define %Student.0* @create_student(i8* %name, i32 %age) {
+define %Student* @create_student(i8* %name, i32 %age) {
 entry:
   %malloccall = tail call i8* @malloc(i32 ptrtoint (%Student* getelementptr (%Student, %Student* null, i32 1) to i32))
   %malloc = bitcast i8* %malloccall to %Student*
