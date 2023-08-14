@@ -6,11 +6,11 @@ use crate::library::ast::Decl;
 use crate::library::{
   ast::{typed, untyped, SimpleType},
   qualify::global_decl_typechecker::sorter::Sorter,
+  typecheck::instantiate::Instantiate,
 };
 
 use anyhow::{bail, Result};
-
-type TypeCheckResult<V> = Result<V>;
+use macros::define_map_result;
 
 pub struct GlobalDeclTypechecker {
   types: HashMap<String, SimpleType>,
@@ -26,13 +26,14 @@ impl GlobalDeclTypechecker {
   pub fn check(
     &mut self,
     untyped_decls: untyped::Decls,
-  ) -> TypeCheckResult<typed::Decls> {
+  ) -> Result<typed::Decls> {
     self.populate_types();
 
     let mut structs = Vec::new();
     let mut classes = Vec::new();
     let mut fundecls = Vec::new();
     let mut vals = Vec::new();
+    let mut impls = Vec::new();
 
     for d in untyped_decls {
       match d {
@@ -40,20 +41,23 @@ impl GlobalDeclTypechecker {
         Decl::Class(c) => classes.push(c),
         Decl::Fun(f) => fundecls.push(f),
         Decl::Val(v) => vals.push(v),
+        Decl::Impl(i) => impls.push(i),
       }
     }
 
     let structs = self.check_structs(structs)?;
     let classes = self.check_classes(classes)?;
-    let fundecls = self.check_fundecls(fundecls)?;
+    let fundecls = self.check_funsigs(fundecls)?;
     let vals = self.check_vals(vals)?;
+    let impls = self.check_impls(impls)?;
 
     let typed_decls = structs
       .into_iter()
-      .map(|s| Decl::Struct(s))
-      .chain(classes.into_iter().map(|c| Decl::Class(c)))
-      .chain(fundecls.into_iter().map(|f| Decl::Fun(f)))
-      .chain(vals.into_iter().map(|v| Decl::Val(v)))
+      .map(Decl::Struct)
+      .chain(classes.into_iter().map(Decl::Class))
+      .chain(fundecls.into_iter().map(Decl::Fun))
+      .chain(vals.into_iter().map(Decl::Val))
+      .chain(impls.into_iter().map(Decl::Impl))
       .collect();
 
     Ok(typed_decls)
@@ -70,17 +74,17 @@ impl GlobalDeclTypechecker {
   fn check_args(
     &self,
     args: Vec<(String, untyped::Type)>,
-  ) -> TypeCheckResult<Vec<(String, typed::Type)>> {
+  ) -> Result<Vec<(String, typed::Type)>> {
     args
       .into_iter()
       .map(|(n, t)| Ok((n, self.get_type(t)?)))
-      .collect::<TypeCheckResult<_>>()
+      .collect::<Result<_>>()
   }
 
   fn check_structs(
     &mut self,
     ss: Vec<untyped::Struct>,
-  ) -> TypeCheckResult<Vec<typed::Struct>> {
+  ) -> Result<Vec<typed::Struct>> {
     let mut type_sorter = Sorter::create(ss);
     let ss = type_sorter.sort()?;
 
@@ -95,27 +99,16 @@ impl GlobalDeclTypechecker {
       .collect()
   }
 
-  fn check_struct(
-    &self,
-    s: untyped::Struct,
-  ) -> TypeCheckResult<typed::Struct> {
+  fn check_struct(&self, s: untyped::Struct) -> Result<typed::Struct> {
     let name = s.name;
     let args = self.check_args(s.args)?;
 
     Ok(typed::Struct { name, args })
   }
 
-  fn check_fundecls(
-    &self,
-    fds: Vec<untyped::FunSig>,
-  ) -> TypeCheckResult<Vec<typed::FunSig>> {
-    fds.into_iter().map(|fd| self.check_fundecl(fd)).collect()
-  }
+  define_map_result!(check_funsig, untyped::FunSig, typed::FunSig);
 
-  fn check_fundecl(
-    &self,
-    fd: untyped::FunSig,
-  ) -> TypeCheckResult<typed::FunSig> {
+  fn check_funsig(&self, fd: untyped::FunSig) -> Result<typed::FunSig> {
     let name = fd.name;
     let args = self.check_args(fd.args)?;
     let rt = self.get_type(fd.rt)?;
@@ -126,17 +119,14 @@ impl GlobalDeclTypechecker {
   fn check_vals(
     &self,
     vds: Vec<untyped::ValDecl>,
-  ) -> TypeCheckResult<Vec<typed::ValDecl>> {
+  ) -> Result<Vec<typed::ValDecl>> {
     let mut name_sorter = Sorter::create(vds);
     let vds = name_sorter.sort()?;
 
     vds.into_iter().map(|fd| self.check_val(fd)).collect()
   }
 
-  fn check_val(
-    &self,
-    vd: untyped::ValDecl,
-  ) -> TypeCheckResult<typed::ValDecl> {
+  fn check_val(&self, vd: untyped::ValDecl) -> Result<typed::ValDecl> {
     let name = vd.name;
     let t = self.get_type(vd.t)?;
     let inner_vals = vd.inner_vals;
@@ -148,31 +138,40 @@ impl GlobalDeclTypechecker {
     })
   }
 
-  fn check_classes(
-    &self,
-    cs: Vec<untyped::Class>,
-  ) -> TypeCheckResult<Vec<typed::Class>> {
-    cs.into_iter().map(|c| self.check_class(c)).collect()
-  }
+  define_map_result!(check_class, untyped::Class, typed::Class);
 
-  fn check_class(&self, c: untyped::Class) -> TypeCheckResult<typed::Class> {
+  fn check_class(&self, c: untyped::Class) -> Result<typed::Class> {
     let name = c.name;
     let methods = c
       .methods
       .into_iter()
-      .map(|m| self.check_fundecl(m))
+      .map(|m| self.check_funsig(m))
       .collect::<Result<_, _>>()?;
 
     Ok(typed::Class { name, methods })
   }
 
-  fn get_type(&self, t: untyped::Type) -> TypeCheckResult<typed::Type> {
+  define_map_result!(check_impl, untyped::ImplDecl, typed::ImplDecl);
+
+  fn check_impl(&self, i: untyped::ImplDecl) -> Result<typed::ImplDecl> {
+    let class_name = i.class_name.clone();
+    let t = self.get_simple_type(i.t.clone())?;
+    let impls = self.check_funsigs(i.impls)?;
+
+    Ok(
+      typed::ImplDecl {
+        class_name,
+        t,
+        impls,
+      }
+      .instantiate(),
+    )
+  }
+
+  fn get_type(&self, t: untyped::Type) -> Result<typed::Type> {
     match t {
       untyped::Type::Simple(s) => {
-        let Some(t) = self.types.get(s.as_str()) else {
-          bail!("Unknown type: {s}")
-        };
-        Ok(typed::Type::Simple(t.clone()))
+        Ok(typed::Type::Simple(self.get_simple_type(s)?))
       }
       untyped::Type::Function(ts) => {
         let ts = ts
@@ -182,5 +181,12 @@ impl GlobalDeclTypechecker {
         Ok(typed::Type::Function(ts))
       }
     }
+  }
+
+  fn get_simple_type(&self, s: String) -> Result<typed::SimpleType> {
+    let Some(t) = self.types.get(s.as_str()) else {
+      bail!("Unknown type: {s}")
+    };
+    Ok(t.clone())
   }
 }

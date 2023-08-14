@@ -1,5 +1,5 @@
 mod closure_manager;
-mod instantiate;
+pub mod instantiate;
 mod namespace;
 
 use anyhow::{anyhow, bail, ensure, Result};
@@ -134,11 +134,15 @@ impl TypeChecker {
       return Ok(c.clone());
     }
 
-    if let Some(Decl::Class(c)) = self
+    if let Some(c) = self
       .module
       .imports
       .iter()
-      .find(|c| c.get_name().as_str() == name)
+      .filter_map(|d| match d {
+        Decl::Class(c) => Some(c),
+        _ => None,
+      })
+      .find(|c| c.name.as_str() == name)
     {
       return Ok(c.clone());
     }
@@ -150,12 +154,30 @@ impl TypeChecker {
     &self,
     this: TypedValue<typed::Expr, typed::Type>,
     method: String,
-  ) -> Option<typed::FunSig> {
-    let Type::Simple(t) = this.t else { return None };
-    self
-      .methods
-      .get(t.get_method_name(&method).as_str())
-      .cloned()
+  ) -> Result<typed::FunSig> {
+    let Type::Simple(t) = &this.t else {
+      bail!("Functional types cannot have methods: {:?}", this.t);
+    };
+
+    if let Some(m) = self.methods.get(t.get_method_name(&method).as_str()) {
+      return Ok(m.clone());
+    };
+
+    if let Some((_, m)) = self
+      .module
+      .imports
+      .iter()
+      .filter_map(|d| match d {
+        Decl::Impl(i) => Some(i),
+        _ => None,
+      })
+      .flat_map(|i| i.impls.iter().map(|e| (&i.t, e)))
+      .find(|(i_t, i_fs)| i_t == &t && i_fs.name == method)
+    {
+      return Ok(m.clone());
+    };
+
+    bail!("No method `{}` defined for type `{:?}`.", method, this.t,);
   }
 
   fn get_simple_type(&self, t: String) -> Result<SimpleType> {
@@ -209,11 +231,11 @@ impl TypeChecker {
   fn typecheck_def(&mut self, d: qualified::Def) -> ValueResult<typed::Def> {
     match d {
       Def::Fun(f) => self.typecheck_fun(f).map(|f| Def::Fun(f.v)),
-      Def::Struct(s) => self.typecheck_struct(s).map(|s| Def::Struct(s)),
-      Def::Val(v) => self.typecheck_val(v).map(|v| Def::Val(v)),
-      Def::Import(i) => self.typecheck_import(i).map(|i| Def::Import(i)),
-      Def::Class(c) => self.typecheck_class(c).map(|c| Def::Class(c)),
-      Def::Impl(i) => self.typecheck_impl(i).map(|i| Def::Impl(i)),
+      Def::Struct(s) => self.typecheck_struct(s).map(Def::Struct),
+      Def::Val(v) => self.typecheck_val(v).map(Def::Val),
+      Def::Import(i) => self.typecheck_import(i).map(Def::Import),
+      Def::Class(c) => self.typecheck_class(c).map(Def::Class),
+      Def::Impl(i) => self.typecheck_impl(i).map(Def::Impl),
     }
   }
 
@@ -290,7 +312,7 @@ impl TypeChecker {
 
     let struct_ = Struct { name, args };
 
-    Ok(struct_.clone())
+    Ok(struct_)
   }
 
   fn typecheck_val(
@@ -332,7 +354,6 @@ impl TypeChecker {
     let name = class.name.clone();
     let methods = class
       .methods
-      .clone()
       .into_iter()
       .map(|m| self.typecheck_funsig(m, true).map(|m| m.v))
       .collect::<Result<_, _>>()?;
@@ -355,7 +376,6 @@ impl TypeChecker {
 
     let impls: Vec<typed::Fun> = impl_
       .impls
-      .clone()
       .into_iter()
       .map(|i| self.typecheck_fun(i).map(|i| i.v))
       .collect::<Result<_, _>>()?;
@@ -364,13 +384,9 @@ impl TypeChecker {
       bail!("No class with name {}", class_name);
     };
 
-    let mut class_sigs = class
-      .methods
-      .clone()
-      .into_iter()
-      .map(|m| m)
-      .collect::<Vec<_>>();
+    let mut class_sigs = class.methods;
     class_sigs.sort_by_key(|m| m.name.clone());
+
     let mut impl_sigs =
       impls.clone().into_iter().map(|i| i.sig).collect::<Vec<_>>();
     impl_sigs.sort_by_key(|m| m.name.clone());
@@ -503,7 +519,7 @@ impl TypeChecker {
 
     let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
       bail!(
-        "Cannot run binary operation on functions: lh: {:?}, rh: {:?}", 
+        "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
         lh.t,
         rh.t,
       );
@@ -711,7 +727,7 @@ impl TypeChecker {
       );
     };
 
-    TypedValue::get((name, struct_.clone(), attr), type_)
+    TypedValue::get((name, struct_, attr), type_)
   }
 
   fn typecheck_new(
@@ -782,13 +798,7 @@ impl TypeChecker {
       .map(|a| self.typecheck_expr(a).map(|a| a.v))
       .collect::<Result<_, _>>()?;
 
-    let Some(fs) = self.get_impl_method(this.clone(), method.clone()) else {
-      bail!(
-        "No method `{}` defined for type `{:?}`.",
-        method,
-        this.t,
-      );
-    };
+    let fs = self.get_impl_method(this.clone(), method.clone())?;
 
     let Type::Simple(t) = this.t else {
       bail!(

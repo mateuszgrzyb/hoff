@@ -123,8 +123,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  fn get_function_type(&self, ts: &Vec<Type>) -> BasicTypeEnum<'ctx> {
-    let mut args = ts.clone();
+  fn get_function_type(&self, ts: &[Type]) -> BasicTypeEnum<'ctx> {
+    let mut args = ts.to_owned();
     let rt = args.pop().unwrap();
     let rt = self.get_type(&rt);
     let args = args
@@ -151,12 +151,25 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   pub fn compile_module(&mut self, m: Mod) {
+    for i in &m.imports {
+      if let Decl::Struct(s) = i {
+        self.compile_struct(s.clone())
+      }
+    }
+
     for i in m.imports {
       match i {
+        Decl::Struct(_) => {}
         Decl::Fun(f) => self.compile_import_fun(f),
-        Decl::Struct(s) => self.compile_struct(s),
         Decl::Val(v) => self.compile_import_val(v),
         Decl::Class(_) => { /* noop */ }
+        Decl::Impl(i) => {
+          for method_sig in &i.impls {
+            let mut method_sig = method_sig.clone();
+            method_sig.name = i.get_method_name_by_sig(&method_sig);
+            self.compile_import_fun(method_sig);
+          }
+        }
       }
     }
 
@@ -166,11 +179,11 @@ impl<'ctx> CodeGen<'ctx> {
     self.module.set_source_file_name(module_name.as_str());
 
     for d in m.defs.into_iter() {
-      self.compile_decl(d);
+      self.compile_def(d);
     }
   }
 
-  fn compile_decl(&mut self, d: Def) {
+  fn compile_def(&mut self, d: Def) {
     match d {
       Def::Fun(f) => {
         self.compile_fun(f, Vec::new());
@@ -193,53 +206,65 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  fn compile_import_fun(&mut self, f: FunSig) {
-    let (arg_names, arg_types) = &f.args
-            .clone()
-            .into_iter()
-            .map(|(n, t)| (n, self.get_type(&t).into()))
-            .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
+  fn get_fun_args_with_closure(
+    &mut self,
+    f: FunSig,
+    closure: Closure,
+  ) -> (Vec<String>, Vec<BasicMetadataTypeEnum<'ctx>>) {
+    f.args
+      .into_iter()
+      .chain(closure)
+      .map(|(n, t)| (n, self.get_type(&t).into()))
+      .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>()
+  }
+
+  fn compile_fun_sig(
+    &mut self,
+    f: FunSig,
+    closure: Closure,
+  ) -> FunctionValue<'ctx> {
+    // prepare function type with closure
+
+    let (arg_names, arg_types) =
+      self.get_fun_args_with_closure(f.clone(), closure);
 
     let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
 
+    // create function value
+
     let function = self.module.add_function(f.name.as_str(), fn_type, None);
+
+    // add names to parameters
 
     for (n, p) in arg_names.iter().zip(function.get_param_iter()) {
       p.set_name(n.as_str());
     }
 
     self.functions.insert(f.name, function);
+
+    function
   }
 
-  fn compile_fun(
+  fn compile_import_fun(&mut self, f: FunSig) {
+    self.compile_fun_sig(f, Vec::new());
+  }
+
+  fn compile_fun_body(
     &mut self,
     f: Fun,
-    closure: Vec<(String, Type)>,
+    closure: Closure,
+    function: FunctionValue<'ctx>,
   ) -> Value<'ctx> {
-    // prepare function type with closure
-
-    let (arg_names, arg_types) = &f.sig.args
-            .clone()
-            .into_iter()
-            .chain(closure.clone())
-            .map(|(n, t)| (n, self.get_type(&t).into()))
-            .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>();
-
-    let fn_type = self.get_type(&f.sig.rt).fn_type(&arg_types[..], false);
-
-    // create function value
-
-    let function =
-      self.module.add_function(f.sig.name.as_str(), fn_type, None);
-
-    // add names to parameters
+    let (arg_names, _) =
+      self.get_fun_args_with_closure(f.sig.clone(), closure.clone());
 
     let basic_block = self.context.append_basic_block(function, "entry");
     let parent_basic_block = self.parent_basic_block;
     self.builder.position_at_end(basic_block);
 
+    // find whether LLVM argument is a regular function argument or closure
+
     for (n, p) in arg_names.iter().zip(function.get_param_iter()) {
-      p.set_name(n.as_str());
       if closure.clone().into_iter().any(|(n1, _)| &n1 == n) {
         self.closure.insert(n.clone(), p);
       } else {
@@ -256,10 +281,15 @@ impl<'ctx> CodeGen<'ctx> {
 
     self.parent_basic_block = Some(basic_block);
 
-    self.functions.insert(f.sig.name, function);
+    //self.functions.insert(f.sig.name, function);
+
     self.current_function = Some(function);
 
+    // compile body
+
     let value = self.compile_expr(f.body);
+
+    // fix builder position
 
     self.builder.position_at_end(basic_block);
     self.builder.build_return(Some(&value));
@@ -271,6 +301,15 @@ impl<'ctx> CodeGen<'ctx> {
       .as_global_value()
       .as_pointer_value()
       .as_basic_value_enum()
+  }
+
+  fn compile_fun(
+    &mut self,
+    f: Fun,
+    closure: Vec<(String, Type)>,
+  ) -> Value<'ctx> {
+    let function = self.compile_fun_sig(f.sig.clone(), closure.clone());
+    self.compile_fun_body(f, closure, function)
   }
 
   fn compile_struct(&mut self, struct_: Struct) {
@@ -309,21 +348,11 @@ impl<'ctx> CodeGen<'ctx> {
     self.compile_fun(f, Vec::new());
   }
 
-  fn _prepare_impl_fun(&mut self, impl_: &Impl, f: Fun) -> Fun {
-    let name = impl_.t.get_method_name(&f.sig.name);
-    let args = f.sig.args;
-    let rt = f.sig.rt;
-
-    Fun {
-      sig: FunSig { name, args, rt },
-      body: f.body,
-    }
-  }
-
   fn compile_impl(&mut self, impl_: Impl) {
-    for i in impl_.impls.clone() {
-      let i = self._prepare_impl_fun(&impl_, i);
-      self.compile_fun(i, Vec::new());
+    for method in impl_.impls.clone() {
+      let method_name = impl_.get_method_name_by_sig(&method.sig);
+      let function = self.functions.get(&method_name).unwrap();
+      self.compile_fun_body(method, Vec::new(), *function);
     }
   }
 
@@ -677,7 +706,7 @@ impl<'ctx> CodeGen<'ctx> {
     args: Vec<Expr>,
   ) -> Value<'ctx> {
     let name = tname.get_method_name(&method);
-    let mut args = args.clone();
+    let mut args = args;
     args.insert(0, this);
     self.compile_call(name, args)
   }

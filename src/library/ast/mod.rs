@@ -79,6 +79,13 @@ pub struct Class<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ImplDecl<T> {
+  pub class_name: String,
+  pub t: T,
+  pub impls: Vec<FunSig<T>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Impl<T, C, S, TN> {
   pub class_name: String,
   pub t: T,
@@ -155,6 +162,7 @@ pub enum Decl<T> {
   Struct(Struct<T>),
   Val(ValDecl<T>),
   Class(Class<T>),
+  Impl(ImplDecl<T>),
 }
 
 impl<T> Decl<T> {
@@ -164,6 +172,7 @@ impl<T> Decl<T> {
       Decl::Struct(s) => &s.name,
       Decl::Val(v) => &v.name,
       Decl::Class(c) => &c.name,
+      Decl::Impl(i) => &i.class_name,
     }
   }
 }
@@ -192,6 +201,7 @@ macro_rules! ast {
     pub type ValDecl = super::ValDecl<$T>;
     pub type Val = super::Val<$T, $C, $S, $TN>;
     pub type Class = super::Class<$T>;
+    pub type ImplDecl = super::ImplDecl<$T>;
     pub type Impl = super::Impl<$T, $C, $S, $TN>;
     pub type Import = $I;
     #[allow(dead_code)]

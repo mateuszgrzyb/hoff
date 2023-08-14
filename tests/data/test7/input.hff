@@ -2,22 +2,3 @@
 class Printer {
    fun print(this: This): String
 }
-
-type Student {
-    name: String,
-    age: Int
-}
-
-impl Printer for Student {
-    fun print(this: This): String {
-        val name: String = this->name;
-        val age: Int = this->age;
-        $"Student<{name}, {age}>"
-    }
-}
-
-fun main(): Int {
-    val student: Student = Student { "Matt", 33 };
-    val student_string: String = student::print();
-    0
-}

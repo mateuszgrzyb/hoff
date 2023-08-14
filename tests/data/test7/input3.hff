@@ -1,0 +1,11 @@
+
+from input import Printer
+from input2 import Student
+
+impl Printer for Student {
+    fun print(this: This): String {
+        val name: String = this->name;
+        val age: Int = this->age;
+        $"Student<{name}, {age}>"
+    }
+}

@@ -39,8 +39,9 @@ parser! {
       = val() / fun() / struct_() / import() / class() / impl_()
 
     pub rule val() -> Def
-      = "val" _ tid:typedid() __ "=" __ e:expr() {
-        Def::Val(Val{ name: tid.0, t: tid.1, expr: e })
+      = "val" _ tid:typedid() __ "=" __ expr:expr() {
+        let (name, t) = tid;
+        Def::Val(Val{ name, t, expr })
       }
 
     pub rule fun_sig() -> FunSig
@@ -49,19 +50,16 @@ parser! {
       }
 
     pub rule _fun() -> Fun
-      = fs:fun_sig() __ "{" __ b:expr() __ "}" {
-        Fun {
-          sig: fs,
-          body: b,
-        }
+      = sig:fun_sig() __ "{" __ body:expr() __ "}" {
+        Fun { sig, body }
       }
 
     pub rule fun() -> Def
       = f:_fun() { Def::Fun(f) }
 
     pub rule struct_() -> Def
-      = "type" _ n:tid() __ "{" __ a:(typedid() ** (__ "," __)) __ "}" {
-        Def::Struct(Struct { name: n, args: a })
+      = "type" _ name:tid() __ "{" __ args:(typedid() ** (__ "," __)) __ "}" {
+        Def::Struct(Struct { name, args })
       }
 
     pub rule import() -> Def
@@ -70,13 +68,13 @@ parser! {
       }
 
     pub rule class() -> Def
-      = "class" _ n:tid() __ "{" __ ms:(fun_sig() ** __) __ "}" {
-        Def::Class(Class { name: n, methods: ms })
+      = "class" _ name:tid() __ "{" __ methods:(fun_sig() ** __) __ "}" {
+        Def::Class(Class { name, methods })
       }
 
     pub rule impl_() -> Def
-      = "impl" _ cn:tid() _ "for" _ t:tid() __ "{" __ is:(_fun() ** __) __ "}" {
-        Def::Impl(Impl { class_name: cn, t: t, impls: is })
+      = "impl" _ class_name:tid() _ "for" _ t:tid() __ "{" __ impls:(_fun() ** __) __ "}" {
+        Def::Impl(Impl { class_name, t, impls })
       }
 
     // Expr

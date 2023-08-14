@@ -2,4 +2,5 @@
 .idea
 /test
 *.exe
+*.o
 .DS_Store

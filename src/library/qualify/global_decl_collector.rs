@@ -46,16 +46,19 @@ impl GlobalDeclCollector {
         };
         self.decls.push(Decl::Class(class))
       }
-      Def::Impl(_) => {}
+      Def::Impl(i) => {
+        let impldecl = ImplDecl {
+          class_name: i.class_name.clone(),
+          t: i.t.clone(),
+          impls: i.impls.clone().into_iter().map(|i| i.sig).collect(),
+        };
+        self.decls.push(Decl::Impl(impldecl))
+      }
     }
   }
 
   fn get_fun_sig(&self, f: &Fun) -> FunSig {
-    FunSig {
-      name: f.sig.name.clone(),
-      args: f.sig.args.clone(),
-      rt: f.sig.rt.clone(),
-    }
+    f.sig.clone()
   }
 
   fn get_inner_vals(&mut self, expr: Expr) -> Vec<String> {
@@ -72,7 +75,7 @@ impl GlobalDeclCollector {
       Expr::New(_, args) => self._map(args),
       Expr::StringTemplate(_, args) => args,
       Expr::MethodCall(this, _, _, args) => {
-        let mut args = args.clone();
+        let mut args = args;
         args.insert(0, *this);
         self._map(args)
       }
