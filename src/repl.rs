@@ -7,20 +7,19 @@ use anyhow::{bail, Result};
 use inkwell::context::Context;
 
 use crate::library::{
-  backend::Interpreter, cli::Args, parser::parse_repl,
-  qualify::TypedGlobalDecls,
+  ast::typed::Decls, backend::Interpreter, cli::Args, parser::parse_repl,
 };
 
 pub struct REPL {
   args: Args,
   context: Context,
-  global_decls: Rc<TypedGlobalDecls>,
+  global_decls: Rc<Decls>,
 }
 
 impl REPL {
   pub fn create(args: Args) -> Self {
     let context = Context::create();
-    let global_decls = Rc::new(TypedGlobalDecls::create());
+    let global_decls = Rc::new(Vec::new());
 
     Self {
       args,

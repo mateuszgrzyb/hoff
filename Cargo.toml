@@ -12,6 +12,7 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", features = ["llvm11-0"]
 lazy_static = "1.4.0"
 peg = "0.8.1"
 regex = "1.7.0"
+macros = { path = "./macros" }
 
 
 [dev-dependencies]

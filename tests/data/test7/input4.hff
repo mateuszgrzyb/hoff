@@ -1,0 +1,9 @@
+
+from input import Printer
+from input2 import Student
+
+fun main(): Int {
+    val student: Student = Student { "Matt", 33 };
+    val student_string: String = student::print();
+    0
+}

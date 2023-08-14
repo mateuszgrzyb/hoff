@@ -7,6 +7,15 @@ fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
   Expr::BinOp(Box::new(lh), op, Box::new(rh))
 }
 
+// Precedence
+// 0. (),
+// 1. let x = ..., fun asdf...
+// 2, Value, Lit
+// 3. *, /
+// 4. +, -
+// 5. ;
+// 6. f()
+
 parser! {
   grammar hoff() for str {
 
@@ -16,40 +25,56 @@ parser! {
       = repl_decl() / repl_expr()
 
     pub rule repl_decl() -> Repl
-      = __ d:decl() __ { Repl::Decl(d) }
+      = __ d:decl() __ { Repl::Def(d) }
 
     pub rule repl_expr() -> Repl
       = __ e:expr() __ { Repl::Expr(e) }
 
     // Compile
 
-    pub rule decls() -> Vec<Decl>
+    pub rule decls() -> Vec<Def>
       = __ ds:(decl() ** __) __ { ds }
 
-    pub rule decl() -> Decl
-      = val() / fun() / struct_() / import()
+    pub rule decl() -> Def
+      = val() / fun() / struct_() / import() / class() / impl_()
 
-    pub rule val() -> Decl
-      = "val" _ tid:typedid() __ "=" __ e:expr() {
-        Decl::Val(Val{ name: tid.0, t: tid.1, expr: e })
+    pub rule val() -> Def
+      = "val" _ tid:typedid() __ "=" __ expr:expr() {
+        let (name, t) = tid;
+        Def::Val(Val{ name, t, expr })
+      }
+
+    pub rule fun_sig() -> FunSig
+      = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() {
+        FunSig { name: n, args: a, rt: t }
       }
 
     pub rule _fun() -> Fun
-      = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() __ "{" __ b:expr() __ "}" {
-        Fun { name: n, args: a, rt: t, body: b }
+      = sig:fun_sig() __ "{" __ body:expr() __ "}" {
+        Fun { sig, body }
       }
 
-    pub rule fun() -> Decl
-      = f:_fun() { Decl::Fun(f) }
+    pub rule fun() -> Def
+      = f:_fun() { Def::Fun(f) }
 
-    pub rule struct_() -> Decl
-      = "type" _ n:tid() __ "{" __ a:(typedid() ** (__ "," __)) __ "}" {
-        Decl::Struct(Struct { name: n, args: a })
+    pub rule struct_() -> Def
+      = "type" _ name:tid() __ "{" __ args:(typedid() ** (__ "," __)) __ "}" {
+        Def::Struct(Struct { name, args })
       }
 
-    pub rule import() -> Decl
+    pub rule import() -> Def
       = "from" _ q:(id() ** "::") _ "import" _ n:(id() / tid()) {
-        Decl::Import((q, n))
+        Def::Import((q, n))
+      }
+
+    pub rule class() -> Def
+      = "class" _ name:tid() __ "{" __ methods:(fun_sig() ** __) __ "}" {
+        Def::Class(Class { name, methods })
+      }
+
+    pub rule impl_() -> Def
+      = "impl" _ class_name:tid() _ "for" _ t:tid() __ "{" __ impls:(_fun() ** __) __ "}" {
+        Def::Impl(Impl { class_name, t, impls })
       }
 
     // Expr
@@ -57,6 +82,10 @@ parser! {
     pub rule expr() -> Expr
       = precedence!{
         x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(x), Box::new(y)) }
+        --
+        "val" _ tid:typedid() __ "=" __ e:@ { Expr::Assign(tid, Box::new(e)) }
+        --
+        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(t), (), m, a) }
         --
         i:id() __ "->" __ a:id() { Expr::Attr(i, (), a) }
         --
@@ -79,7 +108,6 @@ parser! {
         i:if_()      { i }
         c:call()     { c }
         f:fun_expr() { f }
-        "val" _ tid:typedid() __ "=" __ e:@ { Expr::Assign(tid, Box::new(e)) }
         n:new()      { n }
         --
         "(" __ e:expr() __ ")" { e }
@@ -402,14 +430,16 @@ mod test {
   fn test_fun() {
     // given
     let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
-    let exp_fn_ast = Decl::Fun(Fun {
-      name: "name".into(),
-      args: Vec::from([
-        ("a".into(), Type::Simple("Int".into())),
-        ("b".into(), Type::Simple("Int".into())),
-        ("c".into(), Type::Simple("Int".into())),
-      ]),
-      rt: Type::Simple("Int".into()),
+    let exp_fn_ast = Def::Fun(Fun {
+      sig: FunSig {
+        name: "name".into(),
+        args: Vec::from([
+          ("a".into(), Type::Simple("Int".into())),
+          ("b".into(), Type::Simple("Int".into())),
+          ("c".into(), Type::Simple("Int".into())),
+        ]),
+        rt: Type::Simple("Int".into()),
+      },
       body: (Expr::Lit(Lit::Int(33))),
     });
 
@@ -435,39 +465,47 @@ mod test {
 
         "#;
     let exp_ast = Vec::from([
-      Decl::Fun(Fun {
-        name: "f".into(),
-        args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
-        rt: Type::Simple("Int".into()),
+      Def::Fun(Fun {
+        sig: FunSig {
+          name: "f".into(),
+          args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(1))),
       }),
-      Decl::Fun(Fun {
-        name: "g".into(),
-        args: Vec::from([
-          ("b".into(), Type::Simple("Int".into())),
-          ("c".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+      Def::Fun(Fun {
+        sig: FunSig {
+          name: "g".into(),
+          args: Vec::from([
+            ("b".into(), Type::Simple("Int".into())),
+            ("c".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(2))),
       }),
-      Decl::Fun(Fun {
-        name: "h".into(),
-        args: Vec::from([
-          ("d".into(), Type::Simple("Int".into())),
-          ("e".into(), Type::Simple("Int".into())),
-          ("f".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+      Def::Fun(Fun {
+        sig: FunSig {
+          name: "h".into(),
+          args: Vec::from([
+            ("d".into(), Type::Simple("Int".into())),
+            ("e".into(), Type::Simple("Int".into())),
+            ("f".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Lit(Lit::Int(3))),
       }),
-      Decl::Fun(Fun {
-        name: "i".into(),
-        args: Vec::from([
-          ("a".into(), Type::Simple("Int".into())),
-          ("b".into(), Type::Simple("Int".into())),
-          ("c".into(), Type::Simple("Int".into())),
-        ]),
-        rt: Type::Simple("Int".into()),
+      Def::Fun(Fun {
+        sig: FunSig {
+          name: "i".into(),
+          args: Vec::from([
+            ("a".into(), Type::Simple("Int".into())),
+            ("b".into(), Type::Simple("Int".into())),
+            ("c".into(), Type::Simple("Int".into())),
+          ]),
+          rt: Type::Simple("Int".into()),
+        },
         body: (Expr::Value("a".into())),
       }),
     ]);

@@ -88,13 +88,13 @@ impl Compile {
     FS: Iterator<Item = Result<(String, String)>> + Clone,
   {
     #[allow(clippy::let_unit_value)]
-    files.into_iter().map(|f| {
+    files.map(|f| {
       let (name, file) = f?;
-      let decls = parse(&file)?;
+      let defs = parse(&file)?;
       let imports = ();
       Ok(untyped::Mod {
         name,
-        decls,
+        defs,
         imports,
       })
     })
@@ -130,10 +130,7 @@ impl Compile {
   where
     QMS: Iterator<Item = Result<qualified::Mod>>,
   {
-    qms.map(|module| {
-      let mut typechecker = TypeChecker::create();
-      typechecker.check(module?)
-    })
+    qms.map(|module| TypeChecker::create(module?).check())
   }
 
   fn compile_modules<TMS>(

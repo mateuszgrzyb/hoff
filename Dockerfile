@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile-upstream:master-labs
+
 ##############
 # base image #
 ##############
@@ -7,21 +9,28 @@ RUN cargo install cargo-chef && \
     rustup component add clippy && \
     rustup component add rustfmt
 
-RUN apt-get update && \
+RUN <<EOF
+    apt-get update
     apt-get install -y \
         lsb-release \
         wget \
         software-properties-common \
+        neovim \
         gnupg
+    rm -rf /var/lib/apt/lists/*
+    apt-get clean
 
-RUN wget https://apt.llvm.org/llvm.sh && \
-    chmod +x llvm.sh && \
+    wget https://apt.llvm.org/llvm.sh
+    chmod +x llvm.sh
     ./llvm.sh 11
+EOF
 
-RUN apt-get install -y \
+RUN <<EOF
+    apt-get install -y \
         python3 \
-        python3-pip && \
+        python3-pip
     python3 -m pip install pre-commit
+EOF
 
 WORKDIR /app
 

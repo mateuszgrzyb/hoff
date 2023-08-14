@@ -64,6 +64,7 @@ where
 #[case("test4")]
 #[case("test5")]
 #[case("test6")]
+#[case("test7")]
 fn test_compile(mut cli: Command, #[case] dir: &str) {
   // given
   let dir = "tests/data/".to_string() + dir;
@@ -95,6 +96,7 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
   let stderr = String::from_utf8(output.stderr).unwrap();
 
   println!("stderr: {}", stderr);
+  assert!(stderr.is_empty());
 
   let diff = TextDiff::from_lines(stdout.as_str(), expected_output.as_str());
 
@@ -107,6 +109,5 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
     print!("{}{}", sign, change);
   }
 
-  assert!(stderr.is_empty());
   assert_eq!(stdout, expected_output);
 }

@@ -1,127 +1,97 @@
 use std::rc::Rc;
 
-use crate::library::{
-  ast::{
-    qualified,
-    typed::{FunDecl, Struct, ValDecl},
-    untyped, Decl, Mod,
-  },
-  qualify::TypedGlobalDecls,
-};
-use anyhow::anyhow;
+use crate::library::ast::{qualified, typed, untyped};
+use anyhow::bail;
 use anyhow::Result;
 
-type QualifyResult<V> = Result<V>;
-
 pub struct ImportQualifier {
-  global_decls: Rc<TypedGlobalDecls>,
-  fundecls: Vec<FunDecl>,
-  structs: Vec<Struct>,
-  vals: Vec<ValDecl>,
+  global_decls: Rc<typed::Decls>,
+  decls: typed::Decls,
 }
 
 impl ImportQualifier {
-  pub fn create(global_decls: Rc<TypedGlobalDecls>) -> Self {
+  pub fn create(global_decls: Rc<typed::Decls>) -> Self {
     Self {
       global_decls,
-      fundecls: Vec::new(),
-      structs: Vec::new(),
-      vals: Vec::new(),
+      decls: Vec::new(),
     }
   }
 
-  pub fn qualify(&mut self, m: untyped::Mod) -> QualifyResult<qualified::Mod> {
+  pub fn qualify(&mut self, m: untyped::Mod) -> Result<qualified::Mod> {
     let name = m.name;
-    let decls = self.qualify_decls(m.decls)?;
-    let imports = qualified::Imports {
-      fundecls: self.fundecls.clone(),
-      structs: self.structs.clone(),
-      vals: self.vals.clone(),
-    };
+    let defs = self.qualify_defs(m.defs)?;
+    let imports = self.decls.clone();
 
-    Ok(Mod {
+    Ok(qualified::Mod {
       name,
-      decls,
+      defs,
       imports,
     })
   }
 
-  pub fn qualify_decls(
+  pub fn qualify_defs(
     &mut self,
-    decls: Vec<untyped::Decl>,
-  ) -> QualifyResult<Vec<qualified::Decl>> {
-    decls
+    defs: Vec<untyped::Def>,
+  ) -> Result<Vec<qualified::Def>> {
+    defs
       .into_iter()
-      .map(|d| self.qualify_decl(d))
+      .map(|d| self.qualify_def(d))
       .collect::<Result<Vec<_>, _>>()
   }
 
-  fn qualify_decl(
-    &mut self,
-    d: untyped::Decl,
-  ) -> QualifyResult<qualified::Decl> {
+  fn qualify_def(&mut self, d: untyped::Def) -> Result<qualified::Def> {
     match d {
-      Decl::Fun(f) => self.qualify_fun(f).map(Decl::Fun),
-      Decl::Struct(s) => self.qualify_struct(s).map(Decl::Struct),
-      Decl::Val(v) => self.qualify_val(v).map(Decl::Val),
-      Decl::Import(i) => self.qualify_import(i).map(Decl::Import),
+      untyped::Def::Import(i) => {
+        self.qualify_import(i).map(qualified::Def::Import)
+      }
+      untyped::Def::Fun(f) => Ok(qualified::Def::Fun(f)),
+      untyped::Def::Struct(s) => Ok(qualified::Def::Struct(s)),
+      untyped::Def::Val(v) => Ok(qualified::Def::Val(v)),
+      untyped::Def::Class(c) => Ok(qualified::Def::Class(c)),
+      untyped::Def::Impl(i) => Ok(qualified::Def::Impl(i)),
     }
-  }
-
-  fn qualify_fun(&mut self, f: untyped::Fun) -> QualifyResult<qualified::Fun> {
-    Ok(f)
-  }
-
-  fn qualify_struct(
-    &mut self,
-    s: untyped::Struct,
-  ) -> QualifyResult<qualified::Struct> {
-    Ok(s)
-  }
-
-  fn qualify_val(&mut self, v: untyped::Val) -> QualifyResult<qualified::Val> {
-    Ok(v)
   }
 
   fn qualify_import(
     &mut self,
     i: untyped::Import,
-  ) -> QualifyResult<qualified::Import> {
+  ) -> Result<qualified::Import> {
     let (_, name) = i;
 
-    if let Some(s) = self
-      .global_decls
-      .structs
-      .iter()
-      .find(|s| s.name == name)
-      .cloned()
-    {
-      self.structs.push(s.clone());
-      return Ok(qualified::Import::Struct(s));
+    let Some(d) = self.global_decls.iter().find(|d| d.get_name() == &name).cloned() else {
+      bail!("{} cannot be imported", name);
     };
 
-    if let Some(fd) = self
-      .global_decls
-      .fundecls
-      .iter()
-      .find(|fd| fd.name == name)
-      .cloned()
-    {
-      self.fundecls.push(fd.clone());
-      return Ok(qualified::Import::Fun(fd));
+    // auto import all impls if class is imported
+    if let typed::Decl::Class(c) = &d {
+      let class_impls = self
+        .global_decls
+        .iter()
+        .filter_map(|d| match d {
+          typed::Decl::Impl(i) => Some(i),
+          _ => None,
+        })
+        .filter(|i| i.class_name == c.name)
+        .map(|i| typed::Decl::Impl(i.clone()))
+        .collect::<Vec<_>>();
+      // TODO: OPTIMIZE PLZ, WHAT EVEN IS THIS YOU LAZY !!!
+      for class_impl in class_impls {
+        if !self.decls.contains(&class_impl) {
+          self.decls.push(class_impl)
+        }
+      }
     };
 
-    if let Some(v) = self
-      .global_decls
-      .vals
-      .iter()
-      .find(|v| v.name == name)
-      .cloned()
-    {
-      self.vals.push(v.clone());
-      return Ok(qualified::Import::Val(v));
-    }
+    self.decls.push(d.clone());
 
-    Err(anyhow!(format!("{} cannot be imported", name)))
+    let i = match d {
+      typed::Decl::Fun(f) => qualified::Import::Fun(f),
+      typed::Decl::Struct(s) => qualified::Import::Struct(s),
+      typed::Decl::Val(v) => qualified::Import::Val(v),
+      typed::Decl::Class(c) => qualified::Import::Class(c),
+      typed::Decl::Impl(i) => qualified::Import::Impl(i),
+    };
+
+    Ok(i)
   }
 }

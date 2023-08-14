@@ -1,0 +1,4 @@
+
+class Printer {
+   fun print(this: This): String
+}

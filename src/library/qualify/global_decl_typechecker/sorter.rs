@@ -32,12 +32,12 @@ impl Sortable<untyped::Struct> for untyped::Struct {
 
     for (_, arg_type) in self.args.clone() {
       let untyped::Type::Simple(struct_name) = arg_type else {
-                continue
-            };
+        continue
+      };
 
       let Some(node) = marks.get(struct_name.as_str()) else {
-                continue
-            };
+        continue
+      };
 
       inner_structs.push(node.clone())
     }
@@ -55,8 +55,8 @@ impl Sortable<untyped::ValDecl> for untyped::ValDecl {
 
     for val_name in self.inner_vals.clone() {
       let Some(node) = marks.get(val_name.as_str()) else {
-                continue
-            };
+        continue
+      };
 
       inner_vals.push(node.clone())
     }
@@ -99,8 +99,8 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
         .find(|MarkedNode { mark, .. }| matches!(mark, Mark::None));
 
       let Some(node) = node else {
-                return Ok(self.sorted.clone())
-            };
+        return Ok(self.sorted.clone())
+      };
 
       self.visit(node)?
     }

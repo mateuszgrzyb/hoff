@@ -7,7 +7,7 @@ use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
   codegen::CodeGen,
-  qualify::{ImportQualifier, TypedGlobalDecls},
+  qualify::ImportQualifier,
   typecheck::TypeChecker,
 };
 
@@ -16,12 +16,12 @@ pub struct Interpreter<'ctx> {
   qualifier: ImportQualifier,
   codegen: CodeGen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
-  decls: Vec<untyped::Decl>,
+  defs: Vec<untyped::Def>,
 }
 
 impl<'ctx> Interpreter<'ctx> {
   pub fn create(
-    global_decls: Rc<TypedGlobalDecls>,
+    global_decls: Rc<typed::Decls>,
     context: &'ctx Context,
     opt_level: u32,
   ) -> Self {
@@ -35,18 +35,18 @@ impl<'ctx> Interpreter<'ctx> {
     let import_qualifier = ImportQualifier::create(global_decls);
 
     Self {
-      typechecker: TypeChecker::create(),
+      typechecker: TypeChecker::create_empty(),
       qualifier: import_qualifier,
       codegen,
       execution_engine,
-      decls: Vec::new(),
+      defs: Vec::new(),
     }
   }
 
   pub fn eval(&mut self, repl: untyped::Repl) -> Result<String> {
     match repl {
       untyped::Repl::Expr(expr) => self.eval_expr(expr),
-      untyped::Repl::Decl(decl) => self.eval_decl(decl),
+      untyped::Repl::Def(decl) => self.eval_decl(decl),
     }
   }
 
@@ -82,9 +82,9 @@ impl<'ctx> Interpreter<'ctx> {
     Ok(return_value_repr)
   }
 
-  fn eval_decl(&mut self, decl: untyped::Decl) -> Result<String> {
-    let sig = format!("{:?}", decl);
-    self.decls.push(decl);
+  fn eval_decl(&mut self, def: untyped::Def) -> Result<String> {
+    let sig = format!("{:?}", def);
+    self.defs.push(def);
     Ok(sig)
   }
 
@@ -94,22 +94,24 @@ impl<'ctx> Interpreter<'ctx> {
     rt: typed::Type,
   ) -> Result<typed::Mod> {
     let main = typed::Fun {
-      name: "main".to_string(),
-      args: Vec::new(),
-      rt,
+      sig: typed::FunSig {
+        name: "main".to_string(),
+        args: Vec::new(),
+        rt,
+      },
       body,
     };
 
-    let decls = self.decls.clone();
-    let decls = self.qualifier.qualify_decls(decls)?;
-    let mut decls = self.typechecker.typecheck_decls(decls)?;
+    let defs = self.defs.clone();
+    let defs = self.qualifier.qualify_defs(defs)?;
+    let mut defs = self.typechecker.typecheck_defs(defs)?;
 
-    decls.push(typed::Decl::Fun(main));
+    defs.push(typed::Def::Fun(main));
 
     Ok(typed::Mod {
       name: "repl".to_string(),
-      decls,
-      imports: typed::Imports::create(),
+      defs,
+      imports: typed::Decls::default(),
     })
   }
 }
