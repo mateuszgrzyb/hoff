@@ -36,25 +36,7 @@ impl Compile {
       return utils::dump(&self.args, modules);
     };
 
-    //let qualified_modules = self.qualify_modules(modules);
-
-    let qualified_modules = {
-      let global_decl_collector = GlobalDeclCollector::create();
-      let mut global_decl_typechecker = GlobalDeclTypechecker::create();
-
-      let untyped_global_decls =
-        global_decl_collector.collect(modules.clone().filter_map(|m| m.ok()));
-
-      let typed_global_decls =
-        match global_decl_typechecker.check(untyped_global_decls) {
-          Ok(t) => Arc::new(t),
-          Err(e) => return Err(e),
-        };
-
-      let qualifier = ImportQualifier::create(typed_global_decls);
-
-      modules.map(move |module| qualifier.qualify(module?))
-    };
+    let qualified_modules = self.qualify_modules(modules);
 
     if let DumpMode::QualifiedAst = self.args.dump_mode {
       return utils::dump(&self.args, qualified_modules);
@@ -115,7 +97,6 @@ impl Compile {
     })
   }
 
-  /*
   fn qualify_modules<MS>(
     &self,
     ms: MS,
@@ -123,22 +104,27 @@ impl Compile {
   where
     MS: ParallelIterator<Item = Result<untyped::Mod>> + Clone + 'static,
   {
-    let mut global_decl_collector = GlobalDeclCollector::create();
+    let global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
 
     let untyped_global_decls =
       global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
-    let typed_global_decls =
-      match global_decl_typechecker.check(untyped_global_decls) {
-        Ok(t) => Rc::new(t),
-        Err(e) => return rayon::iter::once(Err(e)),
-      };
 
-    let mut qualifier = ImportQualifier::create(typed_global_decls);
+    let typed_global_decls = untyped_global_decls
+      .and_then(|ds| global_decl_typechecker.check(ds))
+      .map(Arc::new);
 
-    ms.map(move |module| qualifier.qualify(module?))
+    let qualifier = Arc::new(typed_global_decls.map(ImportQualifier::create));
+
+    ms.map(move |module| {
+      let qualifier = qualifier.clone();
+
+      match qualifier.as_ref() {
+        Ok(q) => q.qualify(module?),
+        Err(e) => Err(anyhow!(e.to_string())),
+      }
+    })
   }
-   */
 
   fn typecheck_modules<QMS>(
     &self,

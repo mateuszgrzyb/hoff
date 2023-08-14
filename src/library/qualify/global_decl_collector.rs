@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
+use anyhow::{anyhow, Result};
+
 use crate::library::ast::untyped::*;
 
 pub struct GlobalDeclCollector {
@@ -15,22 +17,24 @@ impl GlobalDeclCollector {
     }
   }
 
-  pub fn collect<MS>(&self, ms: MS) -> Decls
+  pub fn collect<MS>(&self, ms: MS) -> Result<Decls>
   where
     MS: ParallelIterator<Item = Mod>,
   {
-    ms.for_each(|m| self.process_mod(&m));
+    ms.try_for_each(|m| self.process_mod(&m))?;
 
     self._return_decls()
   }
 
-  fn process_mod(&self, m: &Mod) {
+  fn process_mod(&self, m: &Mod) -> Result<()> {
     for d in &m.defs {
-      self.process_decl(d)
+      self.process_decl(d)?;
     }
+
+    Ok(())
   }
 
-  fn process_decl(&self, d: &Def) {
+  fn process_decl(&self, d: &Def) -> Result<()> {
     match d {
       Def::Fun(f) => {
         let fundecl = self.get_fun_sig(f);
@@ -45,7 +49,7 @@ impl GlobalDeclCollector {
         };
         self._push_decl(Decl::Val(valdecl))
       }
-      Def::Import(_) => {}
+      Def::Import(_) => Ok(()),
       Def::Class(c) => {
         let class = Class {
           name: c.name.clone(),
@@ -95,12 +99,19 @@ impl GlobalDeclCollector {
       .collect()
   }
 
-  fn _push_decl(&self, decl: Decl) {
-    let mut decls = self.decls.lock().unwrap();
-    decls.push(decl)
+  fn _push_decl(&self, decl: Decl) -> Result<()> {
+    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    decls.push(decl);
+    Ok(())
   }
 
-  fn _return_decls(&self) -> Decls {
-    self.decls.lock().unwrap().clone()
+  fn _return_decls(&self) -> Result<Decls> {
+    Ok(
+      self
+        .decls
+        .lock()
+        .map_err(|e| anyhow!(e.to_string()))?
+        .clone(),
+    )
   }
 }

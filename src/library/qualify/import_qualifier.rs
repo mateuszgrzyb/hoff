@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::library::ast::{qualified, typed, untyped};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use rayon::prelude::*;
 pub struct ImportQualifier {
   global_decls: Arc<typed::Decls>,
@@ -19,7 +19,7 @@ impl ImportQualifier {
   pub fn qualify(&self, m: untyped::Mod) -> Result<qualified::Mod> {
     let name = m.name;
     let defs = self.qualify_defs(m.defs)?;
-    let imports = self._get_decls();
+    let imports = self._get_decls()?;
 
     Ok(qualified::Mod {
       name,
@@ -72,11 +72,11 @@ impl ImportQualifier {
         .collect::<Vec<_>>();
       // TODO: OPTIMIZE PLZ, WHAT EVEN IS THIS YOU LAZY !!!
       for class_impl in class_impls {
-        self._push_decl_if_not_exist(class_impl)
+        self._push_decl_if_not_exist(class_impl)?
       }
     };
 
-    self._push_decl(d.clone());
+    self._push_decl(d.clone())?;
 
     let i = match d {
       typed::Decl::Fun(f) => qualified::Import::Fun(f),
@@ -89,20 +89,23 @@ impl ImportQualifier {
     Ok(i)
   }
 
-  fn _push_decl_if_not_exist(&self, d: typed::Decl) {
-    let mut decls = self.decls.lock().unwrap();
+  fn _push_decl_if_not_exist(&self, d: typed::Decl) -> Result<()> {
+    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
     if !decls.contains(&d) {
       decls.push(d);
-    }
+    };
+
+    Ok(())
   }
 
-  fn _push_decl(&self, d: typed::Decl) {
-    let mut decls = self.decls.lock().unwrap();
+  fn _push_decl(&self, d: typed::Decl) -> Result<()> {
+    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
     decls.push(d);
+    Ok(())
   }
 
-  fn _get_decls(&self) -> typed::Decls {
-    let decls = self.decls.lock().unwrap();
-    decls.clone()
+  fn _get_decls(&self) -> Result<typed::Decls> {
+    let decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    Ok(decls.clone())
   }
 }
