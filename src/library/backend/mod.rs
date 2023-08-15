@@ -14,7 +14,8 @@ pub trait Backend {
   fn run(&self) -> Result<()>;
 }
 
-fn get_opt_level(opt_level: u32) -> OptimizationLevel {
+fn get_opt_level(opt_level: u8) -> OptimizationLevel {
+  let opt_level = opt_level.into();
   if opt_level > OptimizationLevel::Aggressive as u32 {
     return OptimizationLevel::Default;
   }
@@ -43,7 +44,7 @@ mod test {
   #[case(11, OptimizationLevel::Default)]
   #[case(12, OptimizationLevel::Default)]
   fn test_get_opt_level(
-    #[case] int_opt_level: u32,
+    #[case] int_opt_level: u8,
     #[case] exp_opt_level: OptimizationLevel,
   ) {
     // when

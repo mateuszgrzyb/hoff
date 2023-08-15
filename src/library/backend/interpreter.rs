@@ -23,7 +23,7 @@ impl<'ctx> Interpreter<'ctx> {
   pub fn create(
     global_decls: Arc<typed::Decls>,
     context: &'ctx Context,
-    opt_level: u32,
+    opt_level: u8,
   ) -> Self {
     let opt_level = get_opt_level(opt_level);
     let codegen = CodeGen::create(context, true);

@@ -80,7 +80,7 @@ impl<'ctx> Backend for Compiler<'ctx> {
 }
 
 impl<'ctx> Compiler<'ctx> {
-  pub fn create(module: Module<'ctx>, opt_level: u32) -> Self {
+  pub fn create(module: Module<'ctx>, opt_level: u8) -> Self {
     let config = InitializationConfig::default();
 
     Self {

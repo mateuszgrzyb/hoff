@@ -16,6 +16,8 @@ use crate::library::{
   typecheck::TypeChecker,
 };
 
+use self::utils::InputFile;
+
 pub struct Compile {
   args: Args,
   context: Context,
@@ -69,12 +71,8 @@ impl Compile {
 
   fn read_files(
     &self,
-  ) -> impl ParallelIterator<Item = Result<(String, String)>> + Clone {
-    self.args.files.clone().into_par_iter().map(|name| {
-      std::fs::read_to_string(name.clone())
-        .map(|file| (name, file))
-        .map_err(|err| err.into())
-    })
+  ) -> impl ParallelIterator<Item = Result<InputFile>> + Clone {
+    InputFile::read_files(self.args.paths.clone())
   }
 
   fn parse_files<FS>(
@@ -82,12 +80,12 @@ impl Compile {
     files: FS,
   ) -> impl ParallelIterator<Item = Result<untyped::Mod>> + Clone
   where
-    FS: ParallelIterator<Item = Result<(String, String)>> + Clone,
+    FS: ParallelIterator<Item = Result<InputFile>> + Clone,
   {
     #[allow(clippy::let_unit_value)]
     files.map(|f| {
-      let (name, file) = f?;
-      let defs = parse(&file)?;
+      let InputFile { name, contents } = f?;
+      let defs = parse(&contents)?;
       let imports = ();
       Ok(untyped::Mod {
         name,

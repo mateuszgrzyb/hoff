@@ -12,7 +12,7 @@ pub struct JITExecutor<'ctx> {
 type MainFunc = unsafe extern "C" fn() -> u32;
 
 impl<'ctx> JITExecutor<'ctx> {
-  pub fn create(module: Module<'ctx>, opt_level: u32) -> Self {
+  pub fn create(module: Module<'ctx>, opt_level: u8) -> Self {
     let opt_level = get_opt_level(opt_level);
 
     Self {
