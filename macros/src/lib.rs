@@ -47,7 +47,7 @@ struct DefineMapMacroArgs {
 impl From<DefineMap> for DefineMapMacroArgs {
   fn from(value: DefineMap) -> Self {
     let from_name = value.from_name;
-    let to_name = if from_name.to_string().ends_with("s") {
+    let to_name = if from_name.to_string().ends_with('s') {
       format_ident!("{}es", from_name)
     } else {
       format_ident!("{}s", from_name)
@@ -105,6 +105,40 @@ pub fn define_map_result(input: TokenStream) -> TokenStream {
     ) -> Result<Vec<#rt>> {
       es.into_iter().map(|e| self.#from_name(e)).collect()
     }
+  };
+
+  output.into()
+}
+
+struct LockInput {
+  mut_: Option<Token![mut]>,
+  var: Ident,
+}
+
+impl Parse for LockInput {
+  fn parse(input: ParseStream) -> Result<Self> {
+    let lookahead = input.lookahead1();
+
+    let mut_ = if input.is_empty() {
+      return Err(lookahead.error());
+    } else if lookahead.peek(Token![mut]) {
+      Some(input.parse()?)
+    } else {
+      None
+    };
+
+    let var = input.parse()?;
+
+    Ok(Self { mut_, var })
+  }
+}
+
+#[proc_macro]
+pub fn lock(input: TokenStream) -> TokenStream {
+  let LockInput { mut_, var } = parse_macro_input!(input as LockInput);
+
+  let output = quote! {
+    let #mut_ #var = self.#var.lock().map_err(|e| anyhow!(e.to_string()))?;
   };
 
   output.into()

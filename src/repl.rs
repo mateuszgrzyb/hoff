@@ -1,6 +1,6 @@
 use std::{
   io::{stdin, stdout, Write},
-  rc::Rc,
+  sync::Arc,
 };
 
 use anyhow::{bail, Result};
@@ -13,13 +13,13 @@ use crate::library::{
 pub struct REPL {
   args: Args,
   context: Context,
-  global_decls: Rc<Decls>,
+  global_decls: Arc<Decls>,
 }
 
 impl REPL {
   pub fn create(args: Args) -> Self {
     let context = Context::create();
-    let global_decls = Rc::new(Vec::new());
+    let global_decls = Arc::new(Vec::new());
 
     Self {
       args,

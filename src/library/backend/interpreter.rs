@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use inkwell::{context::Context, execution_engine::ExecutionEngine};
@@ -21,12 +21,12 @@ pub struct Interpreter<'ctx> {
 
 impl<'ctx> Interpreter<'ctx> {
   pub fn create(
-    global_decls: Rc<typed::Decls>,
+    global_decls: Arc<typed::Decls>,
     context: &'ctx Context,
-    opt_level: u32,
+    opt_level: u8,
   ) -> Self {
     let opt_level = get_opt_level(opt_level);
-    let codegen = CodeGen::create(context, true);
+    let codegen = CodeGen::create(context, true, false);
     let execution_engine = codegen
       .module
       .create_jit_execution_engine(opt_level)

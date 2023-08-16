@@ -4,6 +4,7 @@ use std::{
   process::Command,
 };
 
+use colored::{ColoredString, Colorize};
 use rstest::*;
 use similar::{ChangeTag, TextDiff};
 
@@ -16,7 +17,7 @@ fn command() -> Command {
 
 #[fixture]
 fn cli(mut command: Command) -> Command {
-  command.args(["-d", "llvmir", "-t", "stdout"]);
+  command.args(["-d", "llvmir", "-t", "stdout", "--sort-decls"]);
   command
 }
 
@@ -55,6 +56,18 @@ where
   } else {
     Err(mismatched)
   }
+}
+
+fn bold_red(diff_str: String) -> ColoredString {
+  diff_str.bold().red()
+}
+
+fn bold_green(diff_str: String) -> ColoredString {
+  diff_str.bold().green()
+}
+
+fn black(diff_str: String) -> ColoredString {
+  diff_str.black()
 }
 
 #[rstest]
@@ -98,16 +111,19 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
   println!("stderr: {}", stderr);
   assert!(stderr.is_empty());
 
-  let diff = TextDiff::from_lines(stdout.as_str(), expected_output.as_str());
+  let diff = TextDiff::from_lines(&stdout, &expected_output);
 
   for change in diff.iter_all_changes() {
-    let sign = match change.tag() {
-      ChangeTag::Delete => "-",
-      ChangeTag::Insert => "+",
-      ChangeTag::Equal => " ",
-    };
-    print!("{}{}", sign, change);
+    let (sign, colorizer): (&str, fn(String) -> ColoredString) =
+      match change.tag() {
+        ChangeTag::Delete => ("-", bold_red),
+        ChangeTag::Insert => ("+", bold_green),
+        ChangeTag::Equal => (" ", black),
+      };
+    let diff_str = colorizer(format!("{sign} {change}"));
+
+    print!("{diff_str}");
   }
 
-  assert_eq!(stdout, expected_output);
+  assert!(stdout == expected_output);
 }

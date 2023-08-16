@@ -22,7 +22,7 @@ RUN <<EOF
 
     wget https://apt.llvm.org/llvm.sh
     chmod +x llvm.sh
-    ./llvm.sh 11
+    ./llvm.sh 12
 EOF
 
 RUN <<EOF
@@ -47,5 +47,7 @@ RUN cargo chef prepare  --recipe-path recipe.json
 FROM chef
 
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
 COPY . .
+# COPY ./macros .
+RUN cargo chef cook --recipe-path recipe.json
+# COPY . .

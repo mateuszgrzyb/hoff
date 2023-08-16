@@ -1,50 +1,62 @@
+use std::sync::{Arc, Mutex};
+
+use macros::lock;
+use rayon::prelude::*;
+
+use anyhow::{anyhow, Result};
+
 use crate::library::ast::untyped::*;
 
 pub struct GlobalDeclCollector {
-  decls: Decls,
+  decls: Arc<Mutex<Decls>>,
 }
 
 impl GlobalDeclCollector {
   pub fn create() -> Self {
-    Self { decls: Vec::new() }
-  }
-
-  pub fn collect<MS>(&mut self, ms: MS) -> Decls
-  where
-    MS: Iterator<Item = Mod>,
-  {
-    ms.for_each(|m| self.process_mod(&m));
-    self.decls.clone()
-  }
-
-  fn process_mod(&mut self, m: &Mod) {
-    for d in &m.defs {
-      self.process_decl(d)
+    Self {
+      decls: Arc::new(Mutex::new(Vec::new())),
     }
   }
 
-  fn process_decl(&mut self, d: &Def) {
+  pub fn collect<MS>(&self, ms: MS) -> Result<Decls>
+  where
+    MS: ParallelIterator<Item = Mod>,
+  {
+    ms.try_for_each(|m| self.process_mod(&m))?;
+
+    self._return_decls()
+  }
+
+  fn process_mod(&self, m: &Mod) -> Result<()> {
+    for d in &m.defs {
+      self.process_decl(d)?;
+    }
+
+    Ok(())
+  }
+
+  fn process_decl(&self, d: &Def) -> Result<()> {
     match d {
       Def::Fun(f) => {
         let fundecl = self.get_fun_sig(f);
-        self.decls.push(Decl::Fun(fundecl))
+        self._push_decl(Decl::Fun(fundecl))
       }
-      Def::Struct(s) => self.decls.push(Decl::Struct(s.clone())),
+      Def::Struct(s) => self._push_decl(Decl::Struct(s.clone())),
       Def::Val(v) => {
         let valdecl = ValDecl {
           name: v.name.clone(),
           t: v.t.clone(),
           inner_vals: self.get_inner_vals(v.expr.clone()),
         };
-        self.decls.push(Decl::Val(valdecl))
+        self._push_decl(Decl::Val(valdecl))
       }
-      Def::Import(_) => {}
+      Def::Import(_) => Ok(()),
       Def::Class(c) => {
         let class = Class {
           name: c.name.clone(),
           methods: c.methods.clone(),
         };
-        self.decls.push(Decl::Class(class))
+        self._push_decl(Decl::Class(class))
       }
       Def::Impl(i) => {
         let impldecl = ImplDecl {
@@ -52,7 +64,7 @@ impl GlobalDeclCollector {
           t: i.t.clone(),
           impls: i.impls.clone().into_iter().map(|i| i.sig).collect(),
         };
-        self.decls.push(Decl::Impl(impldecl))
+        self._push_decl(Decl::Impl(impldecl))
       }
     }
   }
@@ -61,7 +73,7 @@ impl GlobalDeclCollector {
     f.sig.clone()
   }
 
-  fn get_inner_vals(&mut self, expr: Expr) -> Vec<String> {
+  fn get_inner_vals(&self, expr: Expr) -> Vec<String> {
     match expr {
       Expr::BinOp(lh, _, rh) => self._map(Vec::from([*lh, *rh])),
       Expr::Lit(_) => Vec::new(),
@@ -82,9 +94,20 @@ impl GlobalDeclCollector {
     }
   }
 
-  fn _map(&mut self, es: Vec<Expr>) -> Vec<String> {
+  fn _map(&self, es: Vec<Expr>) -> Vec<String> {
     es.into_iter()
       .flat_map(|arg| self.get_inner_vals(arg))
       .collect()
+  }
+
+  fn _push_decl(&self, decl: Decl) -> Result<()> {
+    lock!(mut decls);
+    decls.push(decl);
+    Ok(())
+  }
+
+  fn _return_decls(&self) -> Result<Decls> {
+    lock!(decls);
+    Ok(decls.clone())
   }
 }

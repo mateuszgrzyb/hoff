@@ -1,9 +1,12 @@
-use std::{fmt::Debug, fs::write};
+use std::{
+  fmt::Debug,
+  fs::{read_dir, read_to_string, write},
+};
 
-use inkwell::context::Context;
+use anyhow::{anyhow, Result};
 
-use anyhow::anyhow;
-use anyhow::Result;
+use itertools::Itertools;
+use rayon::{iter::once, prelude::*};
 
 use crate::library::{
   cli::{Args, DumpTarget},
@@ -14,16 +17,18 @@ use crate::library::{
 pub fn dump<I, IS>(args: &Args, is: IS) -> Result<()>
 where
   I: Debug + Nameable,
-  IS: Iterator<Item = Result<I>>,
+  IS: ParallelIterator<Item = Result<I>>,
 {
-  for i in is {
+  is.try_for_each(|i: Result<I>| -> Result<()> {
     let i = i?;
     let contents = format!("{:#?}", i);
     match args.dump_target {
       DumpTarget::File => write(i.get_name(), contents)?,
       DumpTarget::StdOut => println!("{contents}"),
     }
-  }
+
+    Ok(())
+  })?;
 
   Ok(())
 }
@@ -50,10 +55,70 @@ where
   Ok(())
 }
 
-pub fn initialize_contexts(n: usize) -> Vec<Context> {
-  let mut contexts = Vec::new();
-  for _ in 0..n {
-    contexts.push(Context::create())
+#[derive(Clone)]
+pub struct InputFile {
+  pub name: String,
+  pub contents: String,
+}
+
+impl InputFile {
+  pub fn read_files(
+    paths: Vec<String>,
+  ) -> impl ParallelIterator<Item = Result<Self>> + Clone {
+    Self::_read_files(paths.into_par_iter().map(Ok))
+      .map(|i| i.map_err(|e| anyhow!(e)))
   }
-  contexts
+
+  fn _read_files<PS>(
+    paths: PS,
+  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone
+  where
+    PS: ParallelIterator<Item = Result<String, String>> + Clone,
+  {
+    paths.flat_map(Self::_read_file)
+  }
+
+  fn _read_file(
+    path: Result<String, String>,
+  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
+    let file: Result<Self, String> =
+      path.and_then(|path| -> Result<Self, String> {
+        match read_to_string(&path) {
+          Err(e) => Err(e.to_string()),
+          Ok(contents) => Ok(InputFile {
+            name: path,
+            contents,
+          }),
+        }
+      });
+
+    once(file)
+  }
+
+  fn _read_dir(
+    path: String,
+  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
+    let sub_paths = read_dir(path);
+
+    let sub_paths = match sub_paths {
+      Ok(o) => o
+        .into_iter()
+        .map(|e| e.map_err(|e| format!("{:?}", e)))
+        .collect_vec(),
+      Err(e) => vec![Err(e.to_string())],
+    };
+
+    let sub_paths = sub_paths
+      .into_iter()
+      .map(|p| {
+        p.map_err(|e| format!("{:?}", e))?
+          .path()
+          .into_os_string()
+          .into_string()
+          .map_err(|e| format!("{:?}", e))
+      })
+      .collect_vec();
+
+    Self::_read_files(sub_paths.into_par_iter())
+  }
 }

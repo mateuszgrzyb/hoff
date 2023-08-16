@@ -7,7 +7,7 @@ use inkwell::{
   builder::Builder,
   context::Context,
   module::Module,
-  types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType},
+  types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
   values::{
     BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue,
   },
@@ -22,11 +22,11 @@ use crate::library::{
 
 pub struct CodeGen<'ctx> {
   context: &'ctx Context,
+  sort_decls: bool,
   pub module: Module<'ctx>,
   builder: Builder<'ctx>,
   parent_basic_block: Option<BasicBlock<'ctx>>,
   pub types: Types<'ctx>,
-  structs: HashMap<String, (Struct, StructType<'ctx>)>,
   functions: HashMap<String, FunctionValue<'ctx>>,
   values: HashMap<String, BasicValueEnum<'ctx>>,
   closure: HashMap<String, BasicValueEnum<'ctx>>,
@@ -37,7 +37,11 @@ pub struct CodeGen<'ctx> {
 type Value<'ctx> = BasicValueEnum<'ctx>;
 
 impl<'ctx> CodeGen<'ctx> {
-  pub fn create(context: &'ctx Context, add_stdlib: bool) -> Self {
+  pub fn create(
+    context: &'ctx Context,
+    add_stdlib: bool,
+    sort_decls: bool,
+  ) -> Self {
     let module = context.create_module("sum");
     let types = Types {
       int: context.i32_type(),
@@ -58,12 +62,12 @@ impl<'ctx> CodeGen<'ctx> {
       builder: context.create_builder(),
       types,
       parent_basic_block: None,
-      structs: HashMap::new(),
       functions,
       values: HashMap::new(),
       closure: HashMap::new(),
       closures: HashMap::new(),
       current_function: None,
+      sort_decls,
     }
   }
 
@@ -114,10 +118,9 @@ impl<'ctx> CodeGen<'ctx> {
         panic!("this type should not be instantiated")
       }
       SimpleType::Struct(s) => self
-        .structs
-        .get(s.name.as_str())
+        .context
+        .get_struct_type(&s.name)
         .unwrap()
-        .1
         .ptr_type(AddressSpace::default())
         .into(),
     }
@@ -150,7 +153,12 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  pub fn compile_module(&mut self, m: Mod) {
+  pub fn compile_module(&mut self, mut m: Mod) {
+    // TODO: Fix if tests are flaky again...
+    if self.sort_decls {
+      m.imports.sort_by_key(|i| i.get_name().clone());
+    }
+
     for i in &m.imports {
       if let Decl::Struct(s) = i {
         self.compile_struct(s.clone())
@@ -313,18 +321,21 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_struct(&mut self, struct_: Struct) {
-    let name = struct_.name.clone();
+    let name = struct_.name;
     let args = struct_
       .args
-      .clone()
       .into_iter()
       .map(|(_, t)| self.get_type(&t))
       .collect::<Vec<BasicTypeEnum>>();
 
-    let s = self.context.opaque_struct_type(name.as_str());
-    s.set_body(&args[..], true);
-
-    self.structs.insert(name, (struct_, s));
+    self
+      .context
+      .get_struct_type(name.as_str())
+      .unwrap_or_else(|| {
+        let s = self.context.opaque_struct_type(name.as_str());
+        s.set_body(&args[..], true);
+        s
+      });
   }
 
   fn compile_import_val(&mut self, value: ValDecl) {
@@ -644,8 +655,7 @@ impl<'ctx> CodeGen<'ctx> {
   }
 
   fn compile_new(&mut self, name: String, args: Vec<Expr>) -> Value<'ctx> {
-    let structs = self.structs.clone();
-    let (_, struct_type) = structs.get(name.as_str()).unwrap();
+    let struct_type = self.context.get_struct_type(name.as_str()).unwrap();
 
     let struct_args = args
       .into_iter()
@@ -654,8 +664,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     let struct_value = struct_type.const_named_struct(&struct_args);
 
-    let struct_ptr =
-      self.builder.build_malloc(*struct_type, "malloc").unwrap();
+    let struct_ptr = self.builder.build_malloc(struct_type, "malloc").unwrap();
 
     self.builder.build_store(struct_ptr, struct_value);
 
@@ -726,7 +735,7 @@ mod test {
 
   #[fixture]
   fn codegen(context: &'static Context) -> CodeGen<'static> {
-    let codegen = CodeGen::create(&context, false);
+    let codegen = CodeGen::create(&context, false, true);
     codegen
   }
 
