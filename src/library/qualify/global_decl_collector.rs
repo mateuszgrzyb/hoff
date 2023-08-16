@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use macros::lock;
 use rayon::prelude::*;
 
 use anyhow::{anyhow, Result};
@@ -100,18 +101,13 @@ impl GlobalDeclCollector {
   }
 
   fn _push_decl(&self, decl: Decl) -> Result<()> {
-    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    lock!(mut decls);
     decls.push(decl);
     Ok(())
   }
 
   fn _return_decls(&self) -> Result<Decls> {
-    Ok(
-      self
-        .decls
-        .lock()
-        .map_err(|e| anyhow!(e.to_string()))?
-        .clone(),
-    )
+    lock!(decls);
+    Ok(decls.clone())
   }
 }

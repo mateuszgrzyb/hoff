@@ -97,4 +97,9 @@ pub struct Args {
   /// If set to zero, all threads are used.
   #[arg(long, default_value_t = 0, verbatim_doc_comment)]
   pub threads: usize,
+
+  /// Sort declarations.
+  /// Disabled by default, enable for deterministic dumps
+  #[arg(long, default_value_t = false, verbatim_doc_comment)]
+  pub sort_decls: bool,
 }

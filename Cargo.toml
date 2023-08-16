@@ -18,6 +18,7 @@ rayon = "1.7.0"
 
 
 [dev-dependencies]
+colored = "2.0.4"
 indoc = "2.0.0"
 rstest = "0.16.0"
 similar = "2.2.1"

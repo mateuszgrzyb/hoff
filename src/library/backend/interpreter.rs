@@ -26,7 +26,7 @@ impl<'ctx> Interpreter<'ctx> {
     opt_level: u8,
   ) -> Self {
     let opt_level = get_opt_level(opt_level);
-    let codegen = CodeGen::create(context, true);
+    let codegen = CodeGen::create(context, true, false);
     let execution_engine = codegen
       .module
       .create_jit_execution_engine(opt_level)

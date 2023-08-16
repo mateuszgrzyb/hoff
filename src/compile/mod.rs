@@ -108,19 +108,21 @@ impl Compile {
     let untyped_global_decls =
       global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
 
-    let typed_global_decls = untyped_global_decls
-      .and_then(|ds| global_decl_typechecker.check(ds))
-      .map(Arc::new);
-
-    let qualifier = Arc::new(typed_global_decls.map(ImportQualifier::create));
+    let typed_global_decls = Arc::new(
+      untyped_global_decls
+        .and_then(|ds| global_decl_typechecker.check(ds))
+        .map(Arc::new),
+    );
 
     ms.map(move |module| {
-      let qualifier = qualifier.clone();
+      let typed_global_decls = typed_global_decls.clone();
 
-      match qualifier.as_ref() {
-        Ok(q) => q.qualify(module?),
+      let qualifier = match typed_global_decls.as_ref() {
+        Ok(tgds) => Ok(ImportQualifier::create(tgds.clone())),
         Err(e) => Err(anyhow!(e.to_string())),
-      }
+      };
+
+      qualifier?.qualify(module?)
     })
   }
 
@@ -144,7 +146,8 @@ impl Compile {
     let evaluated_tms = tms.collect::<Vec<_>>();
 
     evaluated_tms.into_iter().map(|module| {
-      let mut codegen = CodeGen::create(&self.context, true);
+      let mut codegen =
+        CodeGen::create(&self.context, true, self.args.sort_decls);
       codegen.compile_module(module?);
       Ok(codegen)
     })

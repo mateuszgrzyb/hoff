@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::library::ast::{qualified, typed, untyped};
 use anyhow::{anyhow, bail, Result};
+use macros::lock;
 use rayon::prelude::*;
 pub struct ImportQualifier {
   global_decls: Arc<typed::Decls>,
@@ -90,7 +91,7 @@ impl ImportQualifier {
   }
 
   fn _push_decl_if_not_exist(&self, d: typed::Decl) -> Result<()> {
-    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    lock!(mut decls);
     if !decls.contains(&d) {
       decls.push(d);
     };
@@ -99,13 +100,13 @@ impl ImportQualifier {
   }
 
   fn _push_decl(&self, d: typed::Decl) -> Result<()> {
-    let mut decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    lock!(mut decls);
     decls.push(d);
     Ok(())
   }
 
   fn _get_decls(&self) -> Result<typed::Decls> {
-    let decls = self.decls.lock().map_err(|e| anyhow!(e.to_string()))?;
+    lock!(decls);
     Ok(decls.clone())
   }
 }

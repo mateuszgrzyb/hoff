@@ -22,6 +22,7 @@ use crate::library::{
 
 pub struct CodeGen<'ctx> {
   context: &'ctx Context,
+  sort_decls: bool,
   pub module: Module<'ctx>,
   builder: Builder<'ctx>,
   parent_basic_block: Option<BasicBlock<'ctx>>,
@@ -36,7 +37,11 @@ pub struct CodeGen<'ctx> {
 type Value<'ctx> = BasicValueEnum<'ctx>;
 
 impl<'ctx> CodeGen<'ctx> {
-  pub fn create(context: &'ctx Context, add_stdlib: bool) -> Self {
+  pub fn create(
+    context: &'ctx Context,
+    add_stdlib: bool,
+    sort_decls: bool,
+  ) -> Self {
     let module = context.create_module("sum");
     let types = Types {
       int: context.i32_type(),
@@ -62,6 +67,7 @@ impl<'ctx> CodeGen<'ctx> {
       closure: HashMap::new(),
       closures: HashMap::new(),
       current_function: None,
+      sort_decls,
     }
   }
 
@@ -147,7 +153,12 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  pub fn compile_module(&mut self, m: Mod) {
+  pub fn compile_module(&mut self, mut m: Mod) {
+    // TODO: Fix if tests are flaky again...
+    if self.sort_decls {
+      m.imports.sort_by_key(|i| i.get_name().clone());
+    }
+
     for i in &m.imports {
       if let Decl::Struct(s) = i {
         self.compile_struct(s.clone())
@@ -724,7 +735,7 @@ mod test {
 
   #[fixture]
   fn codegen(context: &'static Context) -> CodeGen<'static> {
-    let codegen = CodeGen::create(&context, false);
+    let codegen = CodeGen::create(&context, false, true);
     codegen
   }
 
