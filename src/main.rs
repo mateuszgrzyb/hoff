@@ -2,14 +2,17 @@
 extern crate core;
 
 use clap::Parser;
+use link::Linker;
 use rayon::ThreadPoolBuilder;
 
 use crate::{compile::Compile, library::cli::Args, repl::REPL};
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 mod compile;
 mod library;
+mod link;
 mod repl;
+mod utils;
 
 fn main() -> Result<()> {
   let args: Args = Args::parse();
@@ -20,9 +23,12 @@ fn main() -> Result<()> {
       .build_global()?
   }
 
-  if args.repl {
-    REPL::create(args).run_loop()
-  } else {
-    Compile::create(args).compile()
+  match (args.repl, args.link) {
+    (true, true) => {
+      bail!("Both repl mode and link is set to true, aborting...")
+    }
+    (true, false) => REPL::create(args).run_loop(),
+    (false, true) => Linker::create(args).link(),
+    (false, false) => Compile::create(args).compile(),
   }
 }

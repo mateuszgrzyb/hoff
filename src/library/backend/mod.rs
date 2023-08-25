@@ -1,11 +1,10 @@
-mod compiler;
+pub mod compiler;
 mod interpreter;
 mod jit_executor;
 
 use anyhow::Result;
 use std::mem::transmute;
 
-pub use compiler::Compiler;
 use inkwell::OptimizationLevel;
 pub use interpreter::Interpreter;
 pub use jit_executor::JITExecutor;

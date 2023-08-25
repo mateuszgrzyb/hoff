@@ -15,6 +15,7 @@ pub enum DumpMode {
   QualifiedAst,
   TypedAst,
   LlvmIr,
+  ObjFiles,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -82,6 +83,10 @@ pub struct Args {
   /// Run in REPL (Read-Eval-Print Loop) mode.
   #[arg(short = 'r', long, default_value_t = false, verbatim_doc_comment)]
   pub repl: bool,
+
+  /// Link object files.
+  #[arg(long, default_value_t = false, verbatim_doc_comment)]
+  pub link: bool,
 
   /// Choose program execution mode.
   #[arg(

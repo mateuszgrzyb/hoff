@@ -2,7 +2,7 @@ mod global_decl_collector;
 mod global_decl_typechecker;
 mod import_qualifier;
 
-pub use global_decl_collector::GlobalDeclCollector;
+pub use global_decl_collector::collect_global_declarations;
 pub use global_decl_typechecker::GlobalDeclTypechecker;
 pub use import_qualifier::ImportQualifier;
 

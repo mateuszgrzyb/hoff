@@ -1,22 +1,24 @@
-mod utils;
-
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
+use do_notation::m;
 use inkwell::{context::Context, module::Module};
 use rayon::prelude::*;
 
-use crate::library::{
-  ast::{qualified, typed, untyped},
-  backend::{Backend, Compiler, JITExecutor},
-  cli::{Args, DumpMode, RunMode},
-  codegen::CodeGen,
-  parser::parse,
-  qualify::{GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier},
-  typecheck::TypeChecker,
+use crate::{
+  library::{
+    ast::{qualified, typed, untyped},
+    backend::{compiler::Compiler, Backend, JITExecutor},
+    cli::{Args, DumpMode, RunMode},
+    codegen::CodeGen,
+    parser::parse,
+    qualify::{
+      collect_global_declarations, GlobalDeclTypechecker, ImportQualifier,
+    },
+    typecheck::TypeChecker,
+  },
+  utils::{self, InputFile},
 };
-
-use self::utils::InputFile;
 
 pub struct Compile {
   args: Args,
@@ -58,12 +60,16 @@ impl Compile {
       return utils::dump_llvm(&self.args, codegens);
     }
 
+    if let DumpMode::ObjFiles = self.args.dump_mode {
+      return utils::dump_obj_files(&self.args, codegens);
+    }
+
     let m = self.link_modules(codegens)?;
     let o = self.args.o;
 
     match self.args.mode {
       RunMode::JIT => JITExecutor::create(m, o).run()?,
-      RunMode::Compile => Compiler::create(m, o).run()?,
+      RunMode::Compile => Compiler::create(m, o)?.run()?,
     };
 
     Ok(())
@@ -72,7 +78,7 @@ impl Compile {
   fn read_files(
     &self,
   ) -> impl ParallelIterator<Item = Result<InputFile>> + Clone {
-    InputFile::read_files(self.args.paths.clone())
+    InputFile::par_read_files(self.args.paths.clone())
   }
 
   fn parse_files<FS>(
@@ -102,17 +108,15 @@ impl Compile {
   where
     MS: ParallelIterator<Item = Result<untyped::Mod>> + Clone + 'static,
   {
-    let global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
 
     let untyped_global_decls =
-      global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
+      collect_global_declarations(ms.clone().filter_map(|m| m.ok()));
 
-    let typed_global_decls = Arc::new(
-      untyped_global_decls
-        .and_then(|ds| global_decl_typechecker.check(ds))
-        .map(Arc::new),
-    );
+    let typed_global_decls = Arc::new(m! {
+      typed_global_decls <- global_decl_typechecker.check(untyped_global_decls);
+      return Arc::new(typed_global_decls);
+    });
 
     ms.map(move |module| {
       let typed_global_decls = typed_global_decls.clone();
