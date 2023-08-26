@@ -13,7 +13,6 @@ lazy_static = "1.4.0"
 peg = "0.8.1"
 regex = "1.7.0"
 macros = { path = "./macros" }
-dir_iterator = { path = "./dir_iterator" }
 itertools = "0.11.0"
 rayon = "1.7.0"
 do-notation = "0.1.3"
