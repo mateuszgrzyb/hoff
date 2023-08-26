@@ -13,6 +13,7 @@ use inkwell::{
   },
   AddressSpace, FloatPredicate, IntPredicate,
 };
+use itertools::{Either, Itertools};
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
@@ -159,13 +160,17 @@ impl<'ctx> CodeGen<'ctx> {
       m.imports.sort_by_key(|i| i.get_name().clone());
     }
 
-    for i in &m.imports {
-      if let Decl::Struct(s) = i {
-        self.compile_struct(s.clone())
-      }
+    let (struct_imports, imports): (Vec<_>, Vec<_>) =
+      m.imports.into_iter().partition_map(|i| match i {
+        Decl::Struct(s) => Either::Left(s),
+        _ => Either::Right(i),
+      });
+
+    for s in struct_imports {
+      self.compile_struct(s)
     }
 
-    for i in m.imports {
+    for i in imports {
       match i {
         Decl::Struct(_) => {}
         Decl::Fun(f) => self.compile_import_fun(f),

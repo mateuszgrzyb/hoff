@@ -80,11 +80,8 @@ impl TypeChecker {
   }
 
   fn get_struct(&self, name: String) -> Result<typed::Struct> {
-    if let Some(args) = self.types.get(name.as_str()) {
-      return Ok(Struct {
-        name: name.to_string(),
-        args: args.clone(),
-      });
+    if let Some(args) = self.types.get(name.as_str()).cloned() {
+      return Ok(Struct { name, args });
     }
 
     if let Some(Decl::Struct(s)) =
@@ -100,8 +97,8 @@ impl TypeChecker {
     &self,
     name: String,
   ) -> Result<(Vec<typed::Type>, typed::Type)> {
-    if let Some(f) = self.functions.get(name.as_str()) {
-      return Ok(f.clone());
+    if let Some(f) = self.functions.get(name.as_str()).cloned() {
+      return Ok(f);
     }
 
     if let Some(Decl::Fun(f)) =
@@ -116,8 +113,8 @@ impl TypeChecker {
   }
 
   fn get_value(&self, name: String) -> Result<typed::Type> {
-    if let Some(ts) = self.values.get(name.as_str()) {
-      return Ok(ts.clone());
+    if let Some(ts) = self.values.get(name.as_str()).cloned() {
+      return Ok(ts);
     }
 
     if let Some(Decl::Val(ts)) =

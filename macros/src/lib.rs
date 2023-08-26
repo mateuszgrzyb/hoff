@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
   parse::{Parse, ParseStream, Result},
-  parse_macro_input, Ident, Token, Type,
+  parse_macro_input, Ident, Token, Type, ItemStruct,
 };
 
 struct DefineMap {
@@ -141,5 +141,129 @@ pub fn lock(input: TokenStream) -> TokenStream {
     let #mut_ #var = self.#var.lock().map_err(|e| anyhow!(e.to_string()))?;
   };
 
+  output.into()
+}
+
+#[proc_macro_attribute]
+pub fn args_converter(_: TokenStream, input: TokenStream) -> TokenStream {
+  let old_input: proc_macro2::TokenStream = input.clone().into();
+  let input = parse_macro_input!(input as ItemStruct);
+
+  let str_name = input.ident;
+  let str_gen_args = input.generics.params.into_iter().map(|p| {
+    let t = match p {
+      syn::GenericParam::Lifetime(_) => todo!(),
+      syn::GenericParam::Type(t) => t,
+      syn::GenericParam::Const(_) => todo!(),
+    };
+    t.ident
+  }).collect::<Vec<_>>();
+
+  let str_gen_args_1 = str_gen_args.iter().map(|i| 
+    Ident::new(format!("{}1", i.to_string()).as_str(), i.span())
+  ).collect::<Vec<_>>();
+  let str_gen_args_2 = str_gen_args.iter().map(|i| 
+    Ident::new(format!("{}", i.to_string()).as_str(), i.span())
+  ).collect::<Vec<_>>();
+
+  let syn::Fields::Named(args) = input.fields else {
+    todo!()
+  };
+
+  let args = args.named.into_iter().collect::<Vec<_>>();
+
+  let (_generic_args, _non_generic_args): (Vec<_>, Vec<_>) = args.into_iter().partition(|f| {
+    let p = match &f.ty {
+      Type::Path(p) => p,
+      _ => todo!(),
+    };
+    p.path.segments.iter().any(|s| {
+      str_gen_args_2.contains(&s.ident)
+      || match s.arguments {
+        syn::PathArguments::AngleBracketed(_) => true,
+        _ => false,
+      }
+    })
+  });
+
+  //panic!(
+  //  "
+
+  //  ga {_generic_args:?}
+  //  nga {_non_generic_args:?}
+
+  //  "
+  //);
+
+  let non_generic_args = _non_generic_args.into_iter().map(|f| f.ident).collect::<Vec<_>>();
+  let generic_args = _generic_args.clone().into_iter().map(|f| f.ident).collect::<Vec<_>>();
+  let generic_arg_types = _generic_args.into_iter().map(|f| f.ty).collect::<Vec<_>>();
+  
+  let ga1 = quote!{
+    <#(#str_gen_args_1),*>
+  };
+  let ga2 = quote!{
+    <#(#str_gen_args_2),*>
+  };
+
+  let unpack = if non_generic_args.is_empty() {
+    quote!{}
+  } else {
+    quote!{
+      let #str_name {
+        #(
+          #non_generic_args
+        ),*
+        ,
+        ..
+      } = self;
+    }
+  };
+
+  let comma = if non_generic_args.is_empty() {
+    quote! {}
+  } else {
+    quote! { , }
+  };
+
+  let output = quote!{
+    #old_input
+
+    impl #ga1 #str_name #ga1 {
+      pub fn conv #ga2 (
+        self, 
+        #(
+          #generic_args: #generic_arg_types
+        ),*
+      ) -> anyhow::Result<#str_name #ga2> {
+        Ok(self.uconv(
+          #(
+            #generic_args
+          ),*
+        ))
+      }
+
+      pub fn uconv #ga2 (
+        self, 
+        #(
+          #generic_args: #generic_arg_types
+        ),*
+      ) -> #str_name #ga2 {
+        #unpack
+        #str_name {
+          #(
+            #non_generic_args
+          ),*
+          #comma
+          #(
+            #generic_args
+          ),*
+        }
+      }
+    }
+  };
+
+  //panic!("{}", output.to_string());
+  
   output.into()
 }

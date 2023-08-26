@@ -36,10 +36,12 @@ fn convert_def_to_decl(d: Def) -> Option<Decl> {
       t,
       impls,
     }) => {
+      let impls = impls.into_par_iter().map(|i| i.sig).collect();
+
       let impldecl = ImplDecl {
         class_name,
         t,
-        impls: impls.into_iter().map(|i| i.sig).collect(),
+        impls,
       };
       Some(Decl::Impl(impldecl))
     }
@@ -71,6 +73,6 @@ mod utils {
   }
 
   fn map(es: Vec<Expr>) -> Vec<String> {
-    es.into_iter().flat_map(get_inner_vals).collect()
+    es.into_par_iter().flat_map(get_inner_vals).collect()
   }
 }

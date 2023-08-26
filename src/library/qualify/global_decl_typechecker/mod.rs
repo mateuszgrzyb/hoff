@@ -142,11 +142,7 @@ impl GlobalDeclTypechecker {
 
   fn check_class(&self, c: untyped::Class) -> Result<typed::Class> {
     let name = c.name;
-    let methods = c
-      .methods
-      .into_iter()
-      .map(|m| self.check_funsig(m))
-      .collect::<Result<_, _>>()?;
+    let methods = self.check_funsigs(c.methods)?;
 
     Ok(typed::Class { name, methods })
   }
@@ -154,7 +150,7 @@ impl GlobalDeclTypechecker {
   define_map_result!(check_impl, untyped::ImplDecl, typed::ImplDecl);
 
   fn check_impl(&self, i: untyped::ImplDecl) -> Result<typed::ImplDecl> {
-    let class_name = i.class_name.clone();
+    let class_name = i.class_name;
     let t = self.get_simple_type(i.t.clone())?;
     let impls = self.check_funsigs(i.impls)?;
 

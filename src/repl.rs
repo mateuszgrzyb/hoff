@@ -19,7 +19,7 @@ pub struct REPL {
 impl REPL {
   pub fn create(args: Args) -> Self {
     let context = Context::create();
-    let global_decls = Arc::new(Vec::new());
+    let global_decls = Default::default();
 
     Self {
       args,

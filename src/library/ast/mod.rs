@@ -1,4 +1,6 @@
-#[derive(Debug, PartialEq, Eq, Clone)]
+use macros::args_converter;
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Op {
   Add,
   Sub,
@@ -14,7 +16,7 @@ pub enum Op {
   Gt,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Lit {
   Int(i32),
   Bool(bool),
@@ -23,7 +25,7 @@ pub enum Lit {
   String(String),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Expr<T, C, S, TN> {
   BinOp(Box<Self>, Op, Box<Self>),
   Lit(Lit),
@@ -39,60 +41,68 @@ pub enum Expr<T, C, S, TN> {
   MethodCall(Box<Self>, TN, String, Vec<Self>),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct FunSig<T> {
   pub name: String,
   pub args: Vec<(String, Type<T>)>,
   pub rt: Type<T>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Fun<T, C, S, TN> {
   pub sig: FunSig<T>,
   pub body: Expr<T, C, S, TN>,
 }
 
+#[args_converter]
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Struct<T> {
   pub name: String,
   pub args: Vec<(String, Type<T>)>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ValDecl<T> {
   pub name: String,
   pub t: Type<T>,
   pub inner_vals: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Val<T, C, S, TN> {
   pub name: String,
   pub t: Type<T>,
   pub expr: Expr<T, C, S, TN>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Class<T> {
   pub name: String,
   pub methods: Vec<FunSig<T>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ImplDecl<T> {
   pub class_name: String,
   pub t: T,
   pub impls: Vec<FunSig<T>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Impl<T, C, S, TN> {
   pub class_name: String,
   pub t: T,
   pub impls: Vec<Fun<T, C, S, TN>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Def<T, C, S, TN, I> {
   Val(Val<T, C, S, TN>),
   Fun(Fun<T, C, S, TN>),
@@ -102,8 +112,9 @@ pub enum Def<T, C, S, TN, I> {
   Impl(Impl<T, C, S, TN>),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Mod<T, C, S, TN, I, IS: Default> {
+#[args_converter]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Mod<T, C, S, TN, I, IS> {
   pub name: String,
   pub defs: Vec<Def<T, C, S, TN, I>>,
   pub imports: IS,
@@ -119,7 +130,7 @@ impl<T, C, S, TN, I, IS: Default> Default for Mod<T, C, S, TN, I, IS> {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Repl<T, C, S, TN, I> {
   Expr(Expr<T, C, S, TN>),
   Def(Def<T, C, S, TN, I>),
@@ -156,7 +167,7 @@ impl SimpleType {
 
 pub type Closure = Vec<(String, Type<SimpleType>)>;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Decl<T> {
   Fun(FunSig<T>),
   Struct(Struct<T>),

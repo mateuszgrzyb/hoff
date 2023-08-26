@@ -119,10 +119,10 @@ impl Compile {
     });
 
     ms.map(move |module| {
-      let typed_global_decls = typed_global_decls.clone();
+      let typed_global_decls = Arc::clone(&typed_global_decls);
 
       let qualifier = match typed_global_decls.as_ref() {
-        Ok(tgds) => Ok(ImportQualifier::create(tgds.clone())),
+        Ok(tgds) => Ok(ImportQualifier::create(Arc::clone(tgds))),
         Err(e) => Err(anyhow!(e.to_string())),
       };
 

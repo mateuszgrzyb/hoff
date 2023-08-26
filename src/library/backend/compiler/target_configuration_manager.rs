@@ -40,6 +40,6 @@ impl TargetConfigurationManager {
       bail!("Invalid target triple: {}", CURRENT_PLATFORM)
     };
 
-    Ok(config.clone())
+    Ok(Rc::clone(config))
   }
 }
