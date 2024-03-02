@@ -268,10 +268,7 @@ mod test {
   #[case::add("a - b", ("a", Op::Sub, "b"))]
   #[case::add("a * b", ("a", Op::Mul, "b"))]
   #[case::add("a / b", ("a", Op::Div, "b"))]
-  fn test_binop(
-    #[case] binop_text: &str,
-    #[case] exp_binop_args: (&str, Op, &str),
-  ) {
+  fn test_binop(#[case] binop_text: &str, #[case] exp_binop_args: (&str, Op, &str)) {
     // given
     let (lh, op, rh) = exp_binop_args;
     let exp_binop_ast = Expr::BinOp(Box::new(BinOp {

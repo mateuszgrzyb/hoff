@@ -7,8 +7,7 @@ use crate::library::ast::{
 };
 
 lazy_static! {
-  pub static ref STRING_TEMPLATE_RE: Regex =
-    Regex::new(r"\{\{|\}\}|\{([^}]+)\}").unwrap();
+  pub static ref STRING_TEMPLATE_RE: Regex = Regex::new(r"\{\{|\}\}|\{([^}]+)\}").unwrap();
 }
 
 fn _format_method_name(type_name: &str, method_name: &str) -> String {

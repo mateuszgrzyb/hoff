@@ -1,14 +1,10 @@
 use anyhow::{anyhow, ensure, Result};
-use std::{
-  collections::HashMap, fs::remove_file, path::Path, process::Command,
-};
+use std::{collections::HashMap, fs::remove_file, path::Path, process::Command};
 
 use current_platform::CURRENT_PLATFORM;
 use inkwell::{
   module::Module,
-  targets::{
-    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple,
-  },
+  targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple},
   OptimizationLevel,
 };
 
@@ -47,8 +43,8 @@ impl<'ctx> Backend for Compiler<'ctx> {
       .get(CURRENT_PLATFORM)
       .ok_or(anyhow!("Unknown target: {}", CURRENT_PLATFORM))?;
 
-    let target = Target::from_triple(&target_config.target_triple)
-      .map_err(|e| anyhow!(e.to_string()))?;
+    let target =
+      Target::from_triple(&target_config.target_triple).map_err(|e| anyhow!(e.to_string()))?;
 
     let target_machine = target
       .create_target_machine(

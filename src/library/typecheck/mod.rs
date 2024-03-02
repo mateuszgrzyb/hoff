@@ -72,10 +72,7 @@ impl TypeChecker {
     Self::create(Mod::default())
   }
 
-  pub fn get_type_of_expr(
-    &mut self,
-    expr: qualified::Expr,
-  ) -> Result<(typed::Expr, typed::Type)> {
+  pub fn get_type_of_expr(&mut self, expr: qualified::Expr) -> Result<(typed::Expr, typed::Type)> {
     self.typecheck_expr(expr).map(|tv| (tv.v, tv.t))
   }
 
@@ -91,26 +88,19 @@ impl TypeChecker {
       });
     }
 
-    if let Some(Decl::Struct(s)) =
-      self.module.imports.iter().find(|s| s.get_name() == &name)
-    {
+    if let Some(Decl::Struct(s)) = self.module.imports.iter().find(|s| s.get_name() == &name) {
       return Ok(s.clone());
     }
 
     bail!("Cant find struct {}", name)
   }
 
-  fn get_function(
-    &self,
-    name: String,
-  ) -> Result<(Vec<typed::Type>, typed::Type)> {
+  fn get_function(&self, name: String) -> Result<(Vec<typed::Type>, typed::Type)> {
     if let Some(f) = self.functions.get(name.as_str()) {
       return Ok(f.clone());
     }
 
-    if let Some(Decl::Fun(f)) =
-      self.module.imports.iter().find(|vd| vd.get_name() == &name)
-    {
+    if let Some(Decl::Fun(f)) = self.module.imports.iter().find(|vd| vd.get_name() == &name) {
       let arg_types = f.args.clone().into_iter().map(|a| a.type_).collect();
       let rt = f.rt.clone();
       return Ok((arg_types, rt));
@@ -124,9 +114,7 @@ impl TypeChecker {
       return Ok(ts.clone());
     }
 
-    if let Some(Decl::Val(ts)) =
-      self.module.imports.iter().find(|i| i.get_name() == &name)
-    {
+    if let Some(Decl::Val(ts)) = self.module.imports.iter().find(|i| i.get_name() == &name) {
       return Ok(ts.t.clone());
     }
 
@@ -223,10 +211,7 @@ impl TypeChecker {
     })
   }
 
-  pub fn typecheck_defs(
-    &mut self,
-    ds: Vec<qualified::Def>,
-  ) -> Result<Vec<typed::Def>> {
+  pub fn typecheck_defs(&mut self, ds: Vec<qualified::Def>) -> Result<Vec<typed::Def>> {
     ds.into_iter()
       .map(|d| self.typecheck_def(d))
       .collect::<Result<_, _>>()
@@ -271,10 +256,7 @@ impl TypeChecker {
     )
   }
 
-  fn typecheck_fun(
-    &mut self,
-    f: qualified::Function,
-  ) -> CheckResult<typed::Function> {
+  fn typecheck_fun(&mut self, f: qualified::Function) -> CheckResult<typed::Function> {
     let TypedValue { v: sig, t } = self.typecheck_funsig(f.f.sig, false)?;
 
     sig.args.iter().for_each(|arg| {
@@ -309,10 +291,7 @@ impl TypeChecker {
     })
   }
 
-  fn typecheck_struct(
-    &mut self,
-    struct_: qualified::Struct,
-  ) -> ValueResult<typed::Struct> {
+  fn typecheck_struct(&mut self, struct_: qualified::Struct) -> ValueResult<typed::Struct> {
     let name = struct_.name;
     let args = struct_
       .args
@@ -339,10 +318,7 @@ impl TypeChecker {
     Ok(struct_)
   }
 
-  fn typecheck_val(
-    &mut self,
-    value: qualified::Val,
-  ) -> ValueResult<typed::Val> {
+  fn typecheck_val(&mut self, value: qualified::Val) -> ValueResult<typed::Val> {
     let name = value.name;
     let t = self.get_type(value.t)?;
     let expr = self.typecheck_expr(value.expr)?;
@@ -364,17 +340,11 @@ impl TypeChecker {
     })
   }
 
-  fn typecheck_import(
-    &mut self,
-    import_: qualified::Import,
-  ) -> ValueResult<typed::Import> {
+  fn typecheck_import(&mut self, import_: qualified::Import) -> ValueResult<typed::Import> {
     Ok(import_)
   }
 
-  fn typecheck_class(
-    &mut self,
-    class: qualified::Class,
-  ) -> ValueResult<typed::Class> {
+  fn typecheck_class(&mut self, class: qualified::Class) -> ValueResult<typed::Class> {
     let name = class.name.clone();
     let methods = class
       .methods
@@ -389,10 +359,7 @@ impl TypeChecker {
     Ok(class)
   }
 
-  fn typecheck_impl(
-    &mut self,
-    impl_: qualified::Impl,
-  ) -> ValueResult<typed::Impl> {
+  fn typecheck_impl(&mut self, impl_: qualified::Impl) -> ValueResult<typed::Impl> {
     let class_name = impl_.class_name.clone();
     // TODO: this should always be SimpleType::Struct
     let t = self.get_simple_type(impl_.t.clone())?;
@@ -415,8 +382,7 @@ impl TypeChecker {
     let mut class_sigs = class.methods;
     class_sigs.sort_by_key(|m| m.name.clone());
 
-    let mut impl_sigs =
-      impls.clone().into_iter().map(|i| i.sig).collect::<Vec<_>>();
+    let mut impl_sigs = impls.clone().into_iter().map(|i| i.sig).collect::<Vec<_>>();
     impl_sigs.sort_by_key(|m| m.name.clone());
 
     if class_sigs != impl_sigs {
@@ -460,10 +426,7 @@ impl TypeChecker {
     Ok(TypedValue { v, t })
   }
 
-  fn typecheck_expr(
-    &mut self,
-    expr: qualified::Expr,
-  ) -> CheckResult<typed::Expr> {
+  fn typecheck_expr(&mut self, expr: qualified::Expr) -> CheckResult<typed::Expr> {
     match expr {
       Expr::BinOp(binop) => {
         let TypedValue { v, t } = self.typecheck_binop(*binop)?;
@@ -507,8 +470,7 @@ impl TypeChecker {
         TypedValue::get(Expr::New(v), t)
       }
       Expr::StringTemplate(stringtemplate) => {
-        let TypedValue { v, t } =
-          self.typecheck_string_template(stringtemplate)?;
+        let TypedValue { v, t } = self.typecheck_string_template(stringtemplate)?;
         TypedValue::get(Expr::StringTemplate(v), t)
       }
       Expr::MethodCall(methodcall) => {
@@ -518,10 +480,7 @@ impl TypeChecker {
     }
   }
 
-  fn typecheck_binop(
-    &mut self,
-    binop: qualified::BinOp,
-  ) -> CheckResult<typed::BinOp> {
+  fn typecheck_binop(&mut self, binop: qualified::BinOp) -> CheckResult<typed::BinOp> {
     let lh = self.typecheck_expr(binop.lh)?;
     let rh = self.typecheck_expr(binop.rh)?;
 
@@ -541,17 +500,16 @@ impl TypeChecker {
     };
 
     match (lht, binop.op) {
-      (
-        SimpleType::Int | SimpleType::Float,
-        op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
-      ) => TypedValue::get(
-        BinOp {
-          lh: lh.v,
-          op,
-          rh: rh.v,
-        },
-        Type::Simple(rht),
-      ),
+      (SimpleType::Int | SimpleType::Float, op @ (Op::Add | Op::Sub | Op::Mul | Op::Div)) => {
+        TypedValue::get(
+          BinOp {
+            lh: lh.v,
+            op,
+            rh: rh.v,
+          },
+          Type::Simple(rht),
+        )
+      }
       (
         SimpleType::Int | SimpleType::Float,
         op @ (Op::Lt | Op::Le | Op::Ne | Op::Eq | Op::Ge | Op::Gt),
@@ -591,19 +549,13 @@ impl TypeChecker {
     TypedValue::get(lit, Type::Simple(t))
   }
 
-  fn typecheck_value(
-    &mut self,
-    value: qualified::Value,
-  ) -> CheckResult<typed::Value> {
+  fn typecheck_value(&mut self, value: qualified::Value) -> CheckResult<typed::Value> {
     let type_ = self.get_value(value.name.clone())?;
 
     TypedValue::get(typed::Value { name: value.name }, type_)
   }
 
-  fn typecheck_assign(
-    &mut self,
-    assign: qualified::Assign,
-  ) -> CheckResult<typed::Assign> {
+  fn typecheck_assign(&mut self, assign: qualified::Assign) -> CheckResult<typed::Assign> {
     let type_ = self.get_type(assign.type_)?;
     let expr = self.typecheck_expr(assign.expr)?;
 
@@ -629,20 +581,14 @@ impl TypeChecker {
     )
   }
 
-  fn typecheck_chain(
-    &mut self,
-    chain: qualified::Chain,
-  ) -> CheckResult<typed::Chain> {
+  fn typecheck_chain(&mut self, chain: qualified::Chain) -> CheckResult<typed::Chain> {
     let lh = self.typecheck_expr(chain.e1)?;
     let rh = self.typecheck_expr(chain.e2)?;
 
     TypedValue::get(Chain { e1: lh.v, e2: rh.v }, rh.t)
   }
 
-  fn typecheck_call(
-    &mut self,
-    call: qualified::Call,
-  ) -> CheckResult<typed::Expr> {
+  fn typecheck_call(&mut self, call: qualified::Call) -> CheckResult<typed::Expr> {
     let (arg_values, arg_types): (Vec<typed::Expr>, Vec<typed::Type>) = call
       .args
       .into_iter()
@@ -665,9 +611,7 @@ impl TypeChecker {
       )
     }
 
-    for (exp_arg_type, arg_type) in
-      exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types)
-    {
+    for (exp_arg_type, arg_type) in exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types) {
       ensure!(
         *exp_arg_type == arg_type,
         "Invalid argument type: {:?} != {:?}",
@@ -770,9 +714,7 @@ impl TypeChecker {
   fn typecheck_attr(&self, attr: qualified::Attr) -> CheckResult<typed::Attr> {
     let struct_ = match (self.get_value(attr.name.clone())?, &self.type_impl) {
       (Type::Simple(SimpleType::Struct(struct_)), _) => struct_,
-      (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => {
-        struct_.clone()
-      }
+      (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => struct_.clone(),
       _ => {
         bail!("Struct `{}` does not exist.", attr.name);
       }
@@ -903,11 +845,7 @@ mod test {
   #[case(Lit::Bool(true), SimpleType::Bool)]
   #[case(Lit::Float("3.2".to_string()), SimpleType::Float)]
   #[case(Lit::String("foo".to_string()), SimpleType::String)]
-  fn test_typecheck_lit(
-    typechecker: TypeChecker,
-    #[case] lit: Lit,
-    #[case] type_: SimpleType,
-  ) {
+  fn test_typecheck_lit(typechecker: TypeChecker, #[case] lit: Lit, #[case] type_: SimpleType) {
     // given
     let expected_result = TypedValue {
       v: lit.clone(),
@@ -1186,11 +1124,7 @@ mod test {
   #[case("Bool", SimpleType::Bool)]
   #[case("Float", SimpleType::Float)]
   #[case("String", SimpleType::String)]
-  fn test_get_type_ok_simple(
-    typechecker: TypeChecker,
-    #[case] s: &str,
-    #[case] t: SimpleType,
-  ) {
+  fn test_get_type_ok_simple(typechecker: TypeChecker, #[case] s: &str, #[case] t: SimpleType) {
     // given
     let s = Type::Simple(s.to_string());
 

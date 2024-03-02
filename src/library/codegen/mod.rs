@@ -8,17 +8,13 @@ use inkwell::{
   context::Context,
   module::Module,
   types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum},
-  values::{
-    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue,
-  },
+  values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue},
   AddressSpace, FloatPredicate, IntPredicate,
 };
 use FloatPredicate::{OEQ, OGE, OGT, OLE, OLT, ONE};
 use IntPredicate::{EQ, NE, SGE, SGT, SLE, SLT};
 
-use crate::library::{
-  ast::typed::*, codegen::types::Types, utils::MethodNamer,
-};
+use crate::library::{ast::typed::*, codegen::types::Types, utils::MethodNamer};
 
 use super::ast::FunArg;
 
@@ -163,8 +159,7 @@ impl<'ctx> ProcessASTNode<'ctx> for Function {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
-    let function =
-      ctx.compile_fun_sig(self.f.sig.clone(), self.closure.clone());
+    let function = ctx.compile_fun_sig(self.f.sig.clone(), self.closure.clone());
     ctx.compile_fun_body(self.f, self.closure, function)
   }
 }
@@ -259,10 +254,7 @@ impl<'ctx> ProcessASTNode<'ctx> for BinOp {
         };
         result.as_basic_value_enum()
       }
-      (
-        BasicTypeEnum::FloatType(_),
-        op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
-      ) => {
+      (BasicTypeEnum::FloatType(_), op @ (Op::Add | Op::Sub | Op::Mul | Op::Div)) => {
         let lh = lh.into_float_value();
         let rh = rh.into_float_value();
         let result = match op {
@@ -497,13 +489,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Attr {
       .find(|(_, arg)| arg.name == self.attr)
       .unwrap();
 
-    let attr_ptr =
-      ctx.builder.build_struct_gep(ptr, i as u32, "attr").unwrap();
+    let attr_ptr = ctx.builder.build_struct_gep(ptr, i as u32, "attr").unwrap();
 
     match arg.type_ {
-      Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
-        attr_ptr.as_basic_value_enum()
-      }
+      Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => attr_ptr.as_basic_value_enum(),
       _ => ctx.builder.build_load(attr_ptr, "load"),
     }
   }
@@ -553,8 +542,7 @@ impl<'ctx> ProcessASTNode<'ctx> for StringTemplate {
       .build_global_string_ptr("", "str_tmpl_rstl")
       .as_basic_value_enum();
 
-    let mut sprintf_args =
-      Vec::from([template_value_result.into(), template_value.into()]);
+    let mut sprintf_args = Vec::from([template_value_result.into(), template_value.into()]);
     sprintf_args.append(&mut values);
 
     let sprintf = ctx.functions.get("sprintf").unwrap();
@@ -580,11 +568,7 @@ impl<'ctx> ProcessASTNode<'ctx> for MethodCall {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-  pub fn create(
-    context: &'ctx Context,
-    add_stdlib: bool,
-    sort_decls: bool,
-  ) -> Self {
+  pub fn create(context: &'ctx Context, add_stdlib: bool, sort_decls: bool) -> Self {
     let module = context.create_module("sum");
     let types = Types {
       int: context.i32_type(),
@@ -632,12 +616,8 @@ impl<'ctx> CodeGen<'ctx> {
         "sprintf",
         context.i32_type().fn_type(
           &[
-            BasicMetadataTypeEnum::from(
-              context.i8_type().ptr_type(AddressSpace::default()),
-            ),
-            BasicMetadataTypeEnum::from(
-              context.i8_type().ptr_type(AddressSpace::default()),
-            ),
+            BasicMetadataTypeEnum::from(context.i8_type().ptr_type(AddressSpace::default())),
+            BasicMetadataTypeEnum::from(context.i8_type().ptr_type(AddressSpace::default())),
           ],
           true,
         ),
@@ -708,15 +688,10 @@ impl<'ctx> CodeGen<'ctx> {
       .unzip::<String, BasicMetadataTypeEnum, Vec<String>, Vec<BasicMetadataTypeEnum>>()
   }
 
-  fn compile_fun_sig(
-    &mut self,
-    f: FunSig,
-    closure: Closure,
-  ) -> FunctionValue<'ctx> {
+  fn compile_fun_sig(&mut self, f: FunSig, closure: Closure) -> FunctionValue<'ctx> {
     // prepare function type with closure
 
-    let (arg_names, arg_types) =
-      self.get_fun_args_with_closure(f.clone(), closure);
+    let (arg_names, arg_types) = self.get_fun_args_with_closure(f.clone(), closure);
 
     let fn_type = self.get_type(&f.rt).fn_type(&arg_types[..], false);
 
@@ -741,8 +716,7 @@ impl<'ctx> CodeGen<'ctx> {
     closure: Closure,
     function: FunctionValue<'ctx>,
   ) -> V<'ctx> {
-    let (arg_names, _) =
-      self.get_fun_args_with_closure(f.sig.clone(), closure.clone());
+    let (arg_names, _) = self.get_fun_args_with_closure(f.sig.clone(), closure.clone());
 
     let basic_block = self.context.append_basic_block(function, "entry");
     let parent_basic_block = self.parent_basic_block;
@@ -862,16 +836,16 @@ mod test {
       imports: Decls::default(),
     };
     let expected_module_str = indoc! {r#"
-            ; ModuleID = 'test_1'
-            source_filename = "test_1.ir"
+        ; ModuleID = 'test_1'
+        source_filename = "test_1.ir"
 
-            %Foo = type <{ i32, i1, i8* }>
+        %Foo = type <{ i32, i1, i8* }>
 
-            define i32 @f1(%Foo* %a) {
-            entry:
-              ret i32 32
-            }
-        "#};
+        define i32 @f1(%Foo* %a) {
+        entry:
+          ret i32 32
+        }
+    "#};
 
     // when
     m.process(&mut codegen);
