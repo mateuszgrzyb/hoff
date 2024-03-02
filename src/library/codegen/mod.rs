@@ -38,6 +38,547 @@ pub struct CodeGen<'ctx> {
 
 type V<'ctx> = BasicValueEnum<'ctx>;
 
+pub trait ProcessASTNode<'ctx> {
+  type R;
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R;
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Mod {
+  type R = ();
+
+  fn process(mut self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    // TODO: Fix if tests are flaky again...
+    if ctx.sort_decls {
+      self.imports.sort_by_key(|i| i.get_name().clone());
+    }
+
+    for i in &self.imports {
+      if let Decl::Struct(s) = i {
+        s.clone().process(ctx)
+      }
+    }
+
+    for i in self.imports {
+      match i {
+        Decl::Struct(_) => {}
+        Decl::Fun(f) => f.process(ctx),
+        Decl::Val(v) => v.process(ctx),
+        Decl::Class(_) => { /* noop */ }
+        Decl::Impl(i) => {
+          for method_sig in &i.impls {
+            let mut method_sig = method_sig.clone();
+            method_sig.name = i.get_method_name_by_sig(&method_sig);
+            method_sig.process(ctx);
+          }
+        }
+      }
+    }
+
+    ctx.module.set_name(self.name.as_str());
+    let mut module_name = self.name.clone();
+    module_name.push_str(".ir");
+    ctx.module.set_source_file_name(module_name.as_str());
+
+    for d in self.defs.into_iter() {
+      d.process(ctx);
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for FunSig {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    ctx.compile_fun_sig(self, Vec::new());
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for ValDecl {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let f = FunSig {
+      name: self.name,
+      args: Vec::new(),
+      rt: self.t,
+    };
+    f.process(ctx)
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Def {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    match self {
+      Def::Fun(f) => {
+        Function {
+          f,
+          closure: Vec::new(),
+        }
+        .process(ctx);
+      }
+      Def::Struct(s) => {
+        s.process(ctx);
+      }
+      Def::Val(v) => {
+        v.process(ctx);
+      }
+      Def::Import(_) => {
+        // imports are compiled before all declarations
+      }
+      Def::Class(_) => {
+        // noop
+      }
+      Def::Impl(i) => {
+        i.process(ctx);
+      }
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Struct {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let name = self.name;
+    let args = self
+      .args
+      .into_iter()
+      .map(|arg| ctx.get_type(&arg.type_))
+      .collect::<Vec<BasicTypeEnum>>();
+
+    ctx
+      .context
+      .get_struct_type(name.as_str())
+      .unwrap_or_else(|| {
+        let s = ctx.context.opaque_struct_type(name.as_str());
+        s.set_body(&args[..], true);
+        s
+      });
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Function {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let function =
+      ctx.compile_fun_sig(self.f.sig.clone(), self.closure.clone());
+    ctx.compile_fun_body(self.f, self.closure, function)
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Val {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    Function {
+      f: Fun {
+        sig: FunSig {
+          name: self.name,
+          args: Vec::new(),
+          rt: self.t,
+        },
+        body: self.expr,
+      },
+      closure: Vec::new(),
+    }
+    .process(ctx);
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Impl {
+  type R = ();
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    for method in self.impls.clone() {
+      let method_name = self.get_method_name_by_sig(&method.sig);
+      let function = ctx.functions.get(&method_name).unwrap();
+      ctx.compile_fun_body(method, Vec::new(), *function);
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Expr {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    match self {
+      Expr::BinOp(binop) => binop.process(ctx),
+      Expr::Lit(l) => l.process(ctx),
+      Expr::Value(value) => value.process(ctx),
+      Expr::Assign(assign) => assign.process(ctx),
+      Expr::Chain(chain) => chain.process(ctx),
+      Expr::Function(function) => function.process(ctx),
+      Expr::Call(call) => call.process(ctx),
+      Expr::If(if_) => if_.process(ctx),
+      Expr::Attr(attr) => attr.process(ctx),
+      Expr::New(new) => new.process(ctx),
+      Expr::StringTemplate(stringtemplate) => stringtemplate.process(ctx),
+      Expr::MethodCall(methodcall) => methodcall.process(ctx),
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for BinOp {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let lh = self.lh.process(ctx);
+    let rh = self.rh.process(ctx);
+
+    let b = &mut ctx.builder;
+
+    match (lh.get_type(), self.op) {
+      (BasicTypeEnum::IntType(i), op) if i == ctx.types.bool => {
+        let lh = lh.into_int_value();
+        let rh = rh.into_int_value();
+        let result = match op {
+          Op::And => ctx.builder.build_and(lh, rh, "and"),
+          Op::Or => ctx.builder.build_or(lh, rh, "and"),
+          _ => panic!("Invalid state"),
+        };
+        result.as_basic_value_enum()
+      }
+      (BasicTypeEnum::IntType(_), op) => {
+        let lh = lh.into_int_value();
+        let rh = rh.into_int_value();
+        let result = match op {
+          Op::Add => b.build_int_add(lh, rh, "add"),
+          Op::Sub => b.build_int_sub(lh, rh, "sub"),
+          Op::Mul => b.build_int_mul(lh, rh, "mul"),
+          Op::Div => b.build_int_signed_div(lh, rh, "div"),
+          Op::Lt => b.build_int_compare(SLT, lh, rh, "ilt"),
+          Op::Le => b.build_int_compare(SLE, lh, rh, "ile"),
+          Op::Ne => b.build_int_compare(NE, lh, rh, "ine"),
+          Op::Eq => b.build_int_compare(EQ, lh, rh, "ieq"),
+          Op::Ge => b.build_int_compare(SGE, lh, rh, "ige"),
+          Op::Gt => b.build_int_compare(SGT, lh, rh, "igt"),
+          Op::And | Op::Or => panic!("Invalid state"),
+        };
+        result.as_basic_value_enum()
+      }
+      (
+        BasicTypeEnum::FloatType(_),
+        op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
+      ) => {
+        let lh = lh.into_float_value();
+        let rh = rh.into_float_value();
+        let result = match op {
+          Op::Add => b.build_float_add(lh, rh, "fadd"),
+          Op::Sub => b.build_float_sub(lh, rh, "fsub"),
+          Op::Mul => b.build_float_mul(lh, rh, "fmul"),
+          Op::Div => b.build_float_div(lh, rh, "fdiv"),
+          _ => panic!("Invalid state"),
+        };
+        result.as_basic_value_enum()
+      }
+
+      (BasicTypeEnum::FloatType(_), op) => {
+        let lh = lh.into_float_value();
+        let rh = rh.into_float_value();
+        let result = match op {
+          Op::Lt => b.build_float_compare(OLT, lh, rh, "flt"),
+          Op::Le => b.build_float_compare(OLE, lh, rh, "fle"),
+          Op::Ne => b.build_float_compare(ONE, lh, rh, "fne"),
+          Op::Eq => b.build_float_compare(OEQ, lh, rh, "feq"),
+          Op::Ge => b.build_float_compare(OGE, lh, rh, "fge"),
+          Op::Gt => b.build_float_compare(OGT, lh, rh, "fgt"),
+          _ => panic!("Invalid state"),
+        };
+        result.as_basic_value_enum()
+      }
+      _ => panic!("Invalid state"),
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Lit {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let ts = &ctx.types;
+    match self {
+      Lit::Int(i) => ts.int.const_int(i as u64, false).as_basic_value_enum(),
+      Lit::Bool(b) => ts.bool.const_int(b.into(), false).as_basic_value_enum(),
+      Lit::Float(f) => ts
+        .float
+        .const_float(f.parse().unwrap())
+        .as_basic_value_enum(),
+      Lit::String(s) => ctx
+        .builder
+        .build_global_string_ptr(&s, "")
+        .as_basic_value_enum(),
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Value {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let n = self.name.as_str();
+
+    if let Some(value) = ctx.closure.get(n) {
+      return *value;
+    }
+
+    if let Some(value) = ctx.values.get(n) {
+      return *value;
+    }
+
+    if let Some(f) = ctx.functions.get(n) {
+      return ctx
+        .builder
+        .build_call(*f, &[], "call")
+        .try_as_basic_value()
+        .left()
+        .unwrap();
+    }
+
+    panic!("unknown value {}", self.name)
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Assign {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let val = self.expr.process(ctx);
+    ctx.values.insert(self.name, val);
+    val
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Chain {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    self.e1.process(ctx);
+    self.e2.process(ctx)
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Call {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let f = *ctx.functions.get(self.name.as_str()).unwrap();
+    let closure = ctx
+      .closures
+      .get(self.name.as_str())
+      .unwrap_or(&Vec::new())
+      .clone();
+
+    let standard_args = self
+      .args
+      .into_iter()
+      .map(|a| a.process(ctx).into())
+      .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+
+    let closure = closure
+      .into_iter()
+      .map(|n| (*ctx.values.get(n.as_str()).unwrap()).into())
+      .collect::<Vec<_>>();
+
+    let args = standard_args
+      .clone()
+      .into_iter()
+      .chain(closure.clone())
+      .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+
+    // println!("
+    // name {}
+    // sa {}
+    // c {}
+    // a {}
+    // f {}
+    // ",
+    // name,
+    // standard_args.len(),
+    // closure.len(),
+    // args.len(),
+    // f.count_params(),
+    // );
+    //
+
+    ctx
+      .builder
+      .build_call(f, &args[..], "call")
+      .try_as_basic_value()
+      .left()
+      .unwrap()
+
+    // if f.count_params() < args.len() as u32 {
+    // panic!("invalid state")
+    // } else if f.count_params() == args.len() as u32 {
+    // self.builder
+    // .build_call(f, &args[..], "call")
+    // .try_as_basic_value()
+    // .left()
+    // .unwrap()
+    // } else {
+    // let partial_ft = Vec::from([
+    // Type::Simple(SimpleType::Int),
+    // Type::Simple(SimpleType::Int),
+    // ]);
+    // let mut partial_ft = partial_ft
+    // .into_iter()
+    // .map(|t| self.get_type(&t))
+    // .collect::<Vec<_>>();
+    // let partial_rt = partial_ft.pop().unwrap();
+    // let ft = partial_rt.fn_type(
+    // &partial_ft
+    // .into_iter()
+    // .map(|t| t.into())
+    // .collect::<Vec<BasicMetadataTypeEnum>>()[..],
+    // false,
+    // );
+    // let partial_f = self.module.add_function("", ft, None);
+    //
+    // let bb = self.context.append_basic_block(partial_f, "entry");
+    // self.builder.position_at_end(bb);
+    // let partial_rt = self
+    // .builder
+    // .build_call(
+    // f,
+    // &(args
+    // .into_iter()
+    // .chain(partial_f.get_param_iter().map(|p| p.into()))
+    // .collect::<Vec<_>>())[..],
+    // "call",
+    // )
+    // .try_as_basic_value()
+    // .left()
+    // .unwrap();
+    // self.builder.build_return(Some(&partial_rt));
+    //
+    // self.builder
+    // .position_at_end(self.parent_basic_block.unwrap());
+    //
+    // partial_f
+    // .as_global_value()
+    // .as_pointer_value()
+    // .as_basic_value_enum()
+    // }
+    //
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for If {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let if_ = self.if_.process(ctx);
+    let then = self.then.process(ctx);
+    let else_ = self.else_.process(ctx);
+    ctx
+      .builder
+      .build_select(if_.into_int_value(), then, else_, "select")
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for Attr {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let ptr = ctx
+      .values
+      .get(self.name.as_str())
+      .unwrap()
+      .into_pointer_value();
+
+    let (i, arg) = self
+      .struct_
+      .args
+      .into_iter()
+      .enumerate()
+      .find(|(_, arg)| arg.name == self.attr)
+      .unwrap();
+
+    let attr_ptr =
+      ctx.builder.build_struct_gep(ptr, i as u32, "attr").unwrap();
+
+    match arg.type_ {
+      Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
+        attr_ptr.as_basic_value_enum()
+      }
+      _ => ctx.builder.build_load(attr_ptr, "load"),
+    }
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for New {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let struct_type = ctx.context.get_struct_type(self.name.as_str()).unwrap();
+
+    let struct_args = self
+      .args
+      .into_iter()
+      .map(|a| a.process(ctx))
+      .collect::<Vec<_>>();
+
+    let struct_value = struct_type.const_named_struct(&struct_args);
+
+    let b = &ctx.builder;
+
+    let struct_ptr = b.build_malloc(struct_type, "malloc").unwrap();
+
+    b.build_store(struct_ptr, struct_value);
+
+    struct_ptr.as_basic_value_enum()
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for StringTemplate {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let mut values: Vec<BasicMetadataValueEnum<'ctx>> = self
+      .args
+      .into_iter()
+      .map(|value| Value { name: value }.process(ctx).into())
+      .collect::<Vec<_>>();
+
+    let b = &ctx.builder;
+
+    let template_value = b
+      .build_global_string_ptr(&self.string, "str_tmpl")
+      .as_basic_value_enum();
+
+    let template_value_result = b
+      .build_global_string_ptr("", "str_tmpl_rstl")
+      .as_basic_value_enum();
+
+    let mut sprintf_args =
+      Vec::from([template_value_result.into(), template_value.into()]);
+    sprintf_args.append(&mut values);
+
+    let sprintf = ctx.functions.get("sprintf").unwrap();
+
+    b.build_call(*sprintf, &sprintf_args[..], "run_str_tmpl")
+      .try_as_basic_value()
+      .left()
+      .unwrap();
+
+    template_value_result
+  }
+}
+
+impl<'ctx> ProcessASTNode<'ctx> for MethodCall {
+  type R = V<'ctx>;
+
+  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+    let name = self.typename.get_method_name(&self.methodname);
+    let mut args = self.args;
+    args.insert(0, self.this);
+    Call { name, args }.process(ctx)
+  }
+}
+
 impl<'ctx> CodeGen<'ctx> {
   pub fn create(
     context: &'ctx Context,
@@ -155,70 +696,6 @@ impl<'ctx> CodeGen<'ctx> {
     }
   }
 
-  pub fn compile_module(&mut self, mut m: Mod) {
-    // TODO: Fix if tests are flaky again...
-    if self.sort_decls {
-      m.imports.sort_by_key(|i| i.get_name().clone());
-    }
-
-    for i in &m.imports {
-      if let Decl::Struct(s) = i {
-        self.compile_struct(s.clone())
-      }
-    }
-
-    for i in m.imports {
-      match i {
-        Decl::Struct(_) => {}
-        Decl::Fun(f) => self.compile_import_fun(f),
-        Decl::Val(v) => self.compile_import_val(v),
-        Decl::Class(_) => { /* noop */ }
-        Decl::Impl(i) => {
-          for method_sig in &i.impls {
-            let mut method_sig = method_sig.clone();
-            method_sig.name = i.get_method_name_by_sig(&method_sig);
-            self.compile_import_fun(method_sig);
-          }
-        }
-      }
-    }
-
-    self.module.set_name(m.name.as_str());
-    let mut module_name = m.name.clone();
-    module_name.push_str(".ir");
-    self.module.set_source_file_name(module_name.as_str());
-
-    for d in m.defs.into_iter() {
-      self.compile_def(d);
-    }
-  }
-
-  fn compile_def(&mut self, d: Def) {
-    match d {
-      Def::Fun(f) => {
-        self.compile_fun(Function {
-          f,
-          closure: Vec::new(),
-        });
-      }
-      Def::Struct(s) => {
-        self.compile_struct(s);
-      }
-      Def::Val(v) => {
-        self.compile_val(v);
-      }
-      Def::Import(_) => {
-        // imports are compiled before all declarations
-      }
-      Def::Class(_) => {
-        // noop
-      }
-      Def::Impl(i) => {
-        self.compile_impl(i);
-      }
-    }
-  }
-
   fn get_fun_args_with_closure(
     &mut self,
     f: FunSig,
@@ -256,10 +733,6 @@ impl<'ctx> CodeGen<'ctx> {
     self.functions.insert(f.name, function);
 
     function
-  }
-
-  fn compile_import_fun(&mut self, f: FunSig) {
-    self.compile_fun_sig(f, Vec::new());
   }
 
   fn compile_fun_body(
@@ -300,7 +773,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     // compile body
 
-    let value = self.compile_expr(f.body);
+    let value = f.body.process(self);
 
     // fix builder position
 
@@ -314,397 +787,6 @@ impl<'ctx> CodeGen<'ctx> {
       .as_global_value()
       .as_pointer_value()
       .as_basic_value_enum()
-  }
-
-  fn compile_fun(&mut self, f: Function) -> V<'ctx> {
-    let function = self.compile_fun_sig(f.f.sig.clone(), f.closure.clone());
-    self.compile_fun_body(f.f, f.closure, function)
-  }
-
-  fn compile_struct(&mut self, struct_: Struct) {
-    let name = struct_.name;
-    let args = struct_
-      .args
-      .into_iter()
-      .map(|arg| self.get_type(&arg.type_))
-      .collect::<Vec<BasicTypeEnum>>();
-
-    self
-      .context
-      .get_struct_type(name.as_str())
-      .unwrap_or_else(|| {
-        let s = self.context.opaque_struct_type(name.as_str());
-        s.set_body(&args[..], true);
-        s
-      });
-  }
-
-  fn compile_import_val(&mut self, value: ValDecl) {
-    let f = FunSig {
-      name: value.name,
-      args: Vec::new(),
-      rt: value.t,
-    };
-    self.compile_import_fun(f);
-  }
-
-  fn compile_val(&mut self, value: Val) {
-    let f = Function {
-      f: Fun {
-        sig: FunSig {
-          name: value.name,
-          args: Vec::new(),
-          rt: value.t,
-        },
-        body: value.expr,
-      },
-      closure: Vec::new(),
-    };
-    self.compile_fun(f);
-  }
-
-  fn compile_impl(&mut self, impl_: Impl) {
-    for method in impl_.impls.clone() {
-      let method_name = impl_.get_method_name_by_sig(&method.sig);
-      let function = self.functions.get(&method_name).unwrap();
-      self.compile_fun_body(method, Vec::new(), *function);
-    }
-  }
-
-  fn compile_expr(&mut self, e: Expr) -> V<'ctx> {
-    match e {
-      Expr::BinOp(binop) => self.compile_binop(*binop),
-      Expr::Lit(l) => self.compile_lit(l),
-      Expr::Value(name) => self.compile_value(name),
-      Expr::Assign(assign) => self.compile_assign(*assign),
-      Expr::Chain(chain) => self.compile_chain(*chain),
-      Expr::Function(function) => self.compile_fun(*function),
-      Expr::Call(call) => self.compile_call(call),
-      Expr::If(if_) => self.compile_if(*if_),
-      Expr::Attr(attr) => self.compile_attr(attr),
-      Expr::New(new) => self.compile_new(new),
-      Expr::StringTemplate(stringtemplate) => {
-        self.compile_string_template(stringtemplate)
-      }
-      Expr::MethodCall(methodcall) => self.compile_method_call(*methodcall),
-    }
-  }
-
-  fn compile_binop(&mut self, binop: BinOp) -> V<'ctx> {
-    let lh = self.compile_expr(binop.lh);
-    let rh = self.compile_expr(binop.rh);
-    match (lh.get_type(), binop.op) {
-      (BasicTypeEnum::IntType(i), op) if i == self.types.bool => {
-        let lh = lh.into_int_value();
-        let rh = rh.into_int_value();
-        let result = match op {
-          Op::And => self.builder.build_and(lh, rh, "and"),
-          Op::Or => self.builder.build_or(lh, rh, "and"),
-          _ => panic!("Invalid state"),
-        };
-        result.as_basic_value_enum()
-      }
-      (BasicTypeEnum::IntType(_), op) => {
-        let lh = lh.into_int_value();
-        let rh = rh.into_int_value();
-        let result = match op {
-          Op::Add => self.builder.build_int_add(lh, rh, "add"),
-          Op::Sub => self.builder.build_int_sub(lh, rh, "sub"),
-          Op::Mul => self.builder.build_int_mul(lh, rh, "mul"),
-          Op::Div => self.builder.build_int_signed_div(lh, rh, "div"),
-          Op::Lt => self.builder.build_int_compare(SLT, lh, rh, "ilt"),
-          Op::Le => self.builder.build_int_compare(SLE, lh, rh, "ile"),
-          Op::Ne => self.builder.build_int_compare(NE, lh, rh, "ine"),
-          Op::Eq => self.builder.build_int_compare(EQ, lh, rh, "ieq"),
-          Op::Ge => self.builder.build_int_compare(SGE, lh, rh, "ige"),
-          Op::Gt => self.builder.build_int_compare(SGT, lh, rh, "igt"),
-          Op::And | Op::Or => panic!("Invalid state"),
-        };
-        result.as_basic_value_enum()
-      }
-      (
-        BasicTypeEnum::FloatType(_),
-        op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
-      ) => {
-        let lh = lh.into_float_value();
-        let rh = rh.into_float_value();
-        let result = match op {
-          Op::Add => self.builder.build_float_add(lh, rh, "fadd"),
-          Op::Sub => self.builder.build_float_sub(lh, rh, "fsub"),
-          Op::Mul => self.builder.build_float_mul(lh, rh, "fmul"),
-          Op::Div => self.builder.build_float_div(lh, rh, "fdiv"),
-          _ => panic!("Invalid state"),
-        };
-        result.as_basic_value_enum()
-      }
-
-      (BasicTypeEnum::FloatType(_), op) => {
-        let lh = lh.into_float_value();
-        let rh = rh.into_float_value();
-        let result = match op {
-          Op::Lt => self.builder.build_float_compare(OLT, lh, rh, "flt"),
-          Op::Le => self.builder.build_float_compare(OLE, lh, rh, "fle"),
-          Op::Ne => self.builder.build_float_compare(ONE, lh, rh, "fne"),
-          Op::Eq => self.builder.build_float_compare(OEQ, lh, rh, "feq"),
-          Op::Ge => self.builder.build_float_compare(OGE, lh, rh, "fge"),
-          Op::Gt => self.builder.build_float_compare(OGT, lh, rh, "fgt"),
-          _ => panic!("Invalid state"),
-        };
-        result.as_basic_value_enum()
-      }
-      _ => panic!("Invalid state"),
-    }
-  }
-
-  fn compile_lit(&self, l: Lit) -> V<'ctx> {
-    match l {
-      Lit::Int(i) => self
-        .types
-        .int
-        .const_int(i as u64, false)
-        .as_basic_value_enum(),
-      Lit::Bool(b) => self
-        .types
-        .bool
-        .const_int(b.into(), false)
-        .as_basic_value_enum(),
-      Lit::Float(f) => self
-        .types
-        .float
-        .const_float(f.parse().unwrap())
-        .as_basic_value_enum(),
-      Lit::String(s) => self
-        .builder
-        .build_global_string_ptr(&s, "")
-        .as_basic_value_enum(),
-    }
-  }
-
-  fn compile_value(&self, Value { name }: Value) -> V<'ctx> {
-    if let Some(value) = self.closure.get(name.as_str()) {
-      return *value;
-    }
-
-    if let Some(value) = self.values.get(name.as_str()) {
-      return *value;
-    }
-
-    if let Some(f) = self.functions.get(name.as_str()) {
-      return self
-        .builder
-        .build_call(*f, &[], "call")
-        .try_as_basic_value()
-        .left()
-        .unwrap();
-    }
-
-    panic!("unknown value {name}")
-  }
-
-  fn compile_assign(&mut self, assign: Assign) -> V<'ctx> {
-    let val = self.compile_expr(assign.expr);
-    self.values.insert(assign.name, val);
-    val
-  }
-
-  fn compile_chain(&mut self, chain: Chain) -> V<'ctx> {
-    self.compile_expr(chain.e1);
-    self.compile_expr(chain.e2)
-  }
-
-  fn compile_call(&mut self, call: Call) -> V<'ctx> {
-    let f = *self.functions.get(call.name.as_str()).unwrap();
-    let closure = self
-      .closures
-      .get(call.name.as_str())
-      .unwrap_or(&Vec::new())
-      .clone();
-
-    let standard_args = call
-      .args
-      .into_iter()
-      .map(|a| self.compile_expr(a).into())
-      .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
-
-    let closure = closure
-      .into_iter()
-      .map(|n| (*self.values.get(n.as_str()).unwrap()).into())
-      .collect::<Vec<_>>();
-
-    let args = standard_args
-      .clone()
-      .into_iter()
-      .chain(closure.clone())
-      .collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
-
-    // println!("
-    // name {}
-    // sa {}
-    // c {}
-    // a {}
-    // f {}
-    // ",
-    // name,
-    // standard_args.len(),
-    // closure.len(),
-    // args.len(),
-    // f.count_params(),
-    // );
-    //
-
-    self
-      .builder
-      .build_call(f, &args[..], "call")
-      .try_as_basic_value()
-      .left()
-      .unwrap()
-
-    // if f.count_params() < args.len() as u32 {
-    // panic!("invalid state")
-    // } else if f.count_params() == args.len() as u32 {
-    // self.builder
-    // .build_call(f, &args[..], "call")
-    // .try_as_basic_value()
-    // .left()
-    // .unwrap()
-    // } else {
-    // let partial_ft = Vec::from([
-    // Type::Simple(SimpleType::Int),
-    // Type::Simple(SimpleType::Int),
-    // ]);
-    // let mut partial_ft = partial_ft
-    // .into_iter()
-    // .map(|t| self.get_type(&t))
-    // .collect::<Vec<_>>();
-    // let partial_rt = partial_ft.pop().unwrap();
-    // let ft = partial_rt.fn_type(
-    // &partial_ft
-    // .into_iter()
-    // .map(|t| t.into())
-    // .collect::<Vec<BasicMetadataTypeEnum>>()[..],
-    // false,
-    // );
-    // let partial_f = self.module.add_function("", ft, None);
-    //
-    // let bb = self.context.append_basic_block(partial_f, "entry");
-    // self.builder.position_at_end(bb);
-    // let partial_rt = self
-    // .builder
-    // .build_call(
-    // f,
-    // &(args
-    // .into_iter()
-    // .chain(partial_f.get_param_iter().map(|p| p.into()))
-    // .collect::<Vec<_>>())[..],
-    // "call",
-    // )
-    // .try_as_basic_value()
-    // .left()
-    // .unwrap();
-    // self.builder.build_return(Some(&partial_rt));
-    //
-    // self.builder
-    // .position_at_end(self.parent_basic_block.unwrap());
-    //
-    // partial_f
-    // .as_global_value()
-    // .as_pointer_value()
-    // .as_basic_value_enum()
-    // }
-    //
-  }
-
-  fn compile_if(&mut self, if_: If) -> V<'ctx> {
-    let be = self.compile_expr(if_.if_);
-    let e1 = self.compile_expr(if_.then);
-    let e2 = self.compile_expr(if_.else_);
-    self
-      .builder
-      .build_select(be.into_int_value(), e1, e2, "select")
-  }
-
-  fn compile_attr(&self, attr: Attr) -> V<'ctx> {
-    let ptr = self.values.get(&*attr.name).unwrap().into_pointer_value();
-
-    let (i, arg) = attr
-      .struct_
-      .args
-      .into_iter()
-      .enumerate()
-      .find(|(_, arg)| arg.name == attr.attr)
-      .unwrap();
-    let attr_ptr = self
-      .builder
-      .build_struct_gep(ptr, i as u32, "attr")
-      .unwrap();
-
-    match arg.type_ {
-      Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
-        attr_ptr.as_basic_value_enum()
-      }
-      _ => self.builder.build_load(attr_ptr, "load"),
-    }
-  }
-
-  fn compile_new(&mut self, new: New) -> V<'ctx> {
-    let struct_type = self.context.get_struct_type(new.name.as_str()).unwrap();
-
-    let struct_args = new
-      .args
-      .into_iter()
-      .map(|a| self.compile_expr(a))
-      .collect::<Vec<_>>();
-
-    let struct_value = struct_type.const_named_struct(&struct_args);
-
-    let struct_ptr = self.builder.build_malloc(struct_type, "malloc").unwrap();
-
-    self.builder.build_store(struct_ptr, struct_value);
-
-    struct_ptr.as_basic_value_enum()
-  }
-
-  fn compile_string_template(
-    &mut self,
-    stringtemplate: StringTemplate,
-  ) -> V<'ctx> {
-    let mut values: Vec<BasicMetadataValueEnum<'ctx>> = stringtemplate
-      .args
-      .into_iter()
-      .map(|value| self.compile_value(Value { name: value }).into())
-      .collect::<Vec<_>>();
-
-    let template_value = self
-      .builder
-      .build_global_string_ptr(&stringtemplate.string, "str_tmpl")
-      .as_basic_value_enum();
-
-    let template_value_result = self
-      .builder
-      .build_global_string_ptr("", "str_tmpl_rstl")
-      .as_basic_value_enum();
-
-    let mut sprintf_args =
-      Vec::from([template_value_result.into(), template_value.into()]);
-    sprintf_args.append(&mut values);
-
-    let sprintf = self.functions.get("sprintf").unwrap();
-
-    self
-      .builder
-      .build_call(*sprintf, &sprintf_args[..], "run_str_tmpl")
-      .try_as_basic_value()
-      .left()
-      .unwrap();
-
-    template_value_result
-  }
-
-  fn compile_method_call(&mut self, methodcall: MethodCall) -> V<'ctx> {
-    let name = methodcall.typename.get_method_name(&methodcall.methodname);
-    let mut args = methodcall.args;
-    args.insert(0, methodcall.this);
-    self.compile_call(Call { name, args })
   }
 }
 
@@ -792,7 +874,7 @@ mod test {
         "#};
 
     // when
-    codegen.compile_module(m);
+    m.process(&mut codegen);
 
     // then
     assert_eq!(codegen.module.to_string(), expected_module_str);

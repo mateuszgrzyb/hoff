@@ -10,7 +10,7 @@ use crate::library::{
   ast::{qualified, typed, untyped},
   backend::{Backend, Compiler, JITExecutor},
   cli::{Args, DumpMode, RunMode},
-  codegen::CodeGen,
+  codegen::{CodeGen, ProcessASTNode},
   parser::parse,
   qualify::{GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier},
   typecheck::TypeChecker,
@@ -148,7 +148,8 @@ impl Compile {
     evaluated_tms.into_iter().map(|module| {
       let mut codegen =
         CodeGen::create(&self.context, true, self.args.sort_decls);
-      codegen.compile_module(module?);
+
+      module?.process(&mut codegen);
       Ok(codegen)
     })
   }

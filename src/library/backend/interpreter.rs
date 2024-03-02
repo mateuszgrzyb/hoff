@@ -6,7 +6,7 @@ use inkwell::{context::Context, execution_engine::ExecutionEngine};
 use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
-  codegen::CodeGen,
+  codegen::{CodeGen, ProcessASTNode as _},
   qualify::ImportQualifier,
   typecheck::TypeChecker,
 };
@@ -55,7 +55,7 @@ impl<'ctx> Interpreter<'ctx> {
 
     let main_mod = self.create_main(body, rt.clone())?;
 
-    self.codegen.compile_module(main_mod);
+    main_mod.process(&mut self.codegen);
 
     let return_value_repr = unsafe {
       let Ok(main) = self.execution_engine.get_function_value("main") else {
