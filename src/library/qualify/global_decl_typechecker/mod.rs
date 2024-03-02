@@ -71,13 +71,33 @@ impl GlobalDeclTypechecker {
     self.types.insert("This".to_string(), SimpleType::This);
   }
 
-  fn check_args(
+  fn check_funargs(
     &self,
-    args: Vec<(String, untyped::Type)>,
-  ) -> Result<Vec<(String, typed::Type)>> {
+    args: Vec<untyped::FunArg>,
+  ) -> Result<Vec<typed::FunArg>> {
     args
       .into_iter()
-      .map(|(n, t)| Ok((n, self.get_type(t)?)))
+      .map(|arg| {
+        Ok(typed::FunArg {
+          name: arg.name,
+          type_: self.get_type(arg.type_)?,
+        })
+      })
+      .collect::<Result<_>>()
+  }
+
+  fn check_structargs(
+    &self,
+    args: Vec<untyped::StructArg>,
+  ) -> Result<Vec<typed::StructArg>> {
+    args
+      .into_iter()
+      .map(|arg| {
+        Ok(typed::StructArg {
+          name: arg.name,
+          type_: self.get_type(arg.type_)?,
+        })
+      })
       .collect::<Result<_>>()
   }
 
@@ -101,7 +121,7 @@ impl GlobalDeclTypechecker {
 
   fn check_struct(&self, s: untyped::Struct) -> Result<typed::Struct> {
     let name = s.name;
-    let args = self.check_args(s.args)?;
+    let args = self.check_structargs(s.args)?;
 
     Ok(typed::Struct { name, args })
   }
@@ -110,7 +130,7 @@ impl GlobalDeclTypechecker {
 
   fn check_funsig(&self, fd: untyped::FunSig) -> Result<typed::FunSig> {
     let name = fd.name;
-    let args = self.check_args(fd.args)?;
+    let args = self.check_funargs(fd.args)?;
     let rt = self.get_type(fd.rt)?;
 
     Ok(typed::FunSig { name, args, rt })

@@ -19,7 +19,10 @@ trait InstantiateSubject {
     let args = fs
       .args
       .into_iter()
-      .map(|(v, t)| (v, self.instantiate_type(t)))
+      .map(|mut arg| {
+        arg.type_ = self.instantiate_type(arg.type_);
+        arg
+      })
       .collect();
     let rt = self.instantiate_type(fs.rt);
     FunSig { name, args, rt }

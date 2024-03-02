@@ -3,8 +3,10 @@ use peg::*;
 
 use crate::library::ast::untyped::*;
 
+use super::ast::BinOp;
+
 fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
-  Expr::BinOp(Box::new(lh), op, Box::new(rh))
+  Expr::BinOp(Box::new(BinOp { lh, op, rh }))
 }
 
 // Precedence
@@ -46,7 +48,7 @@ parser! {
 
     pub rule fun_sig() -> FunSig
       = "fun" _ n:id() __ "(" __ a:(typedid() ** (__ "," __)) __ ")" __ ":" __ t:type_() {
-        FunSig { name: n, args: a, rt: t }
+        FunSig { name: n, args: a.into_iter().map(|(name, type_)| FunArg { name, type_ }).collect(), rt: t }
       }
 
     pub rule _fun() -> Fun
@@ -59,7 +61,7 @@ parser! {
 
     pub rule struct_() -> Def
       = "type" _ name:tid() __ "{" __ args:(typedid() ** (__ "," __)) __ "}" {
-        Def::Struct(Struct { name, args })
+        Def::Struct(Struct { name, args: args.into_iter().map(|(name, type_)| StructArg { name, type_ }).collect() })
       }
 
     pub rule import() -> Def
@@ -81,13 +83,13 @@ parser! {
 
     pub rule expr() -> Expr
       = precedence!{
-        x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(x), Box::new(y)) }
+        x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(Chain { e1: x, e2: y })) }
         --
-        "val" _ tid:typedid() __ "=" __ e:@ { Expr::Assign(tid, Box::new(e)) }
+        "val" _ tid:typedid() __ "=" __ expr:@ { Expr::Assign(Box::new(Assign { name: tid.0, type_: tid.1, expr})) }
         --
-        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(t), (), m, a) }
+        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(MethodCall { this: t, typename: (), methodname: m, args: a })) }
         --
-        i:id() __ "->" __ a:id() { Expr::Attr(i, (), a) }
+        i:id() __ "->" __ a:id() { Expr::Attr(Attr { name: i, struct_: (), attr: a }) }
         --
         x:(@)  __ "&&" __ y:@ { binop(x, Op::And, y) }
         x:(@)  __ "||" __ y:@ { binop(x, Op::Or, y) }
@@ -119,7 +121,8 @@ parser! {
     // String template
 
     pub rule str_temp() -> Expr
-      = s:__str_temp() { Expr::StringTemplate(s.0, s.1) }
+      // = s:__str_temp() { Expr::StringTemplate(s.0, s.1) }
+      = s:__str_temp() { Expr::StringTemplate(StringTemplate { string: s.0, args: s.1 }) }
 
     rule __str_temp() -> (String, Vec<String>)
       = "$\"" s:__str_temp_body() "\""  {
@@ -160,31 +163,31 @@ parser! {
 
     pub rule if_() -> Expr
       = "if" _ be:expr() __ "{" __ e1:expr() __ "}" __ "else" __ "{" __ e2:expr() __ "}" {
-        Expr::If(Box::new(be), Box::new(e1), Box::new(e2))
+        Expr::If(Box::new(If { if_: be, then: e1, else_: e2 }))
       }
 
     // Name
 
     pub rule name() -> Expr
-      = i:id() { Expr::Value(i) }
+      = i:id() { Expr::Value(Value { name: i }) }
 
     // Call
 
     pub rule call() -> Expr
       = i:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" {
-        Expr::Call(i, a)
+        Expr::Call(Call { name: i, args: a })
       }
 
     // Fun expr
 
     pub rule fun_expr() -> Expr
-      = f:_fun() { Expr::Function(Box::new(f), ()) }
+      = f:_fun() { Expr::Function(Box::new(Function { f, closure: () })) }
 
     // New
 
     pub rule new() -> Expr
       = t:tid() __ "{" __ a:(expr() ** (__ "," __)) __ "}" {
-        Expr::New(t, a)
+        Expr::New(New { name: t, args: a })
       }
 
     // ---- utils ----
@@ -271,11 +274,11 @@ mod test {
   ) {
     // given
     let (lh, op, rh) = exp_binop_args;
-    let exp_binop_ast = Expr::BinOp(
-      Box::new(Expr::Value(lh.into())),
+    let exp_binop_ast = Expr::BinOp(Box::new(BinOp {
+      lh: Expr::Value(Value { name: lh.into() }),
       op,
-      Box::new(Expr::Value(rh.into())),
-    );
+      rh: Expr::Value(Value { name: rh.into() }),
+    }));
 
     // when
     let binop_ast = hoff::expr(binop_text).unwrap();
@@ -284,118 +287,64 @@ mod test {
     assert_eq!(binop_ast, exp_binop_ast)
   }
 
+  type S = &'static str;
+
+  fn ternop_r(a: S, op1: Op, (b, op2, c): (S, Op, S)) -> Expr {
+    Expr::BinOp(Box::new(BinOp {
+      lh: Expr::Value(Value { name: a.into() }),
+      op: op1,
+      rh: Expr::BinOp(Box::new(BinOp {
+        lh: Expr::Value(Value { name: b.into() }),
+        op: op2,
+        rh: Expr::Value(Value { name: c.into() }),
+      })),
+    }))
+  }
+
+  fn ternop_l((a, op1, b): (S, Op, S), op2: Op, c: S) -> Expr {
+    Expr::BinOp(Box::new(BinOp {
+      lh: Expr::BinOp(Box::new(BinOp {
+        lh: Expr::Value(Value { name: a.into() }),
+        op: op1,
+        rh: Expr::Value(Value { name: b.into() }),
+      })),
+      op: op2,
+      rh: Expr::Value(Value { name: c.into() }),
+    }))
+  }
+
   #[rstest]
   #[case::add_mul(
     "a + b * c",
-    Expr::BinOp(
-      Box::new(Expr::Value("a".into())),
-      Op::Add,
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("b".into())),
-          Op::Mul,
-          Box::new(Expr::Value("c".into())),
-        ),
-      ),
-    ),
+    ternop_r("a", Op::Add, ("b", Op::Mul, "c")),
   )]
   #[case::mul_add(
     "b * c + a",
-    Expr::BinOp(
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("b".into())),
-          Op::Mul,
-          Box::new(Expr::Value("c".into())),
-        )
-      ),
-      Op::Add,
-      Box::new(Expr::Value("a".into())),
-    ),
+    ternop_l(("b", Op::Mul, "c"), Op::Add, "a")
   )]
   #[case::sub_div(
     "a - b / c",
-    Expr::BinOp(
-      Box::new(Expr::Value("a".into())),
-      Op::Sub,
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("b".into())),
-          Op::Div,
-          Box::new(Expr::Value("c".into())),
-        ),
-      ),
-    ),
+    ternop_r("a", Op::Sub, ("b", Op::Div, "c"))
   )]
   #[case::div_sub(
     "a / b - c",
-    Expr::BinOp(
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("a".into())),
-          Op::Div,
-          Box::new(Expr::Value("b".into())),
-        )
-      ),
-      Op::Sub,
-      Box::new(Expr::Value("c".into())),
-    ),
+    ternop_l(("a", Op::Div, "b"), Op::Sub, "c")
   )]
   #[case::_sub__mul(
     "(a - b) * c",
-    Expr::BinOp(
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("a".into())),
-          Op::Sub,
-          Box::new(Expr::Value("b".into())),
-        ),
-      ),
-      Op::Mul,
-      Box::new(Expr::Value("c".into())),
-    ),
+    ternop_l(("a", Op::Sub, "b"), Op::Mul, "c")
   )]
   #[case::mul__sub_(
     "c * (a - b)",
-    Expr::BinOp(
-      Box::new(Expr::Value("c".into())),
-      Op::Mul,
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("a".into())),
-          Op::Sub,
-          Box::new(Expr::Value("b".into())),
-        ),
-      ),
-    ),
+    ternop_r("c", Op::Mul, ("a", Op::Sub, "b"))
   )]
   #[case::div__add_(
     "a / (b + c)",
-    Expr::BinOp(
-      Box::new(Expr::Value("a".into())),
-      Op::Div,
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("b".into())),
-          Op::Add,
-          Box::new(Expr::Value("c".into())),
-        ),
-      ),
-    ),
+    ternop_r("a", Op::Div, ("b", Op::Add, "c"))
   )]
   #[case::div__add_(
     "(b + c) / a",
-    Expr::BinOp(
-      Box::new(
-        Expr::BinOp(
-          Box::new(Expr::Value("b".into())),
-          Op::Add,
-          Box::new(Expr::Value("c".into())),
-        ),
-      ),
-      Op::Div,
-      Box::new(Expr::Value("a".into())),
-    ),
+    ternop_l(("b", Op::Add, "c"), Op::Div, "a")
   )]
   fn test_binop_adv(#[case] binop_text: &str, #[case] exp_binop_ast: Expr) {
     // when
@@ -409,12 +358,19 @@ mod test {
   #[case::val_chain(
     "val i: Int = 1; 2",
     Expr::Chain(
-      Box::new(Expr::Assign(
-        ("i".into(), Type::Simple("Int".into())),
-        Box::new(Expr::Lit(Lit::Int(1))),
-      )),
       Box::new(
-        Expr::Lit(Lit::Int(2))
+        Chain {
+          e1: Expr::Assign(
+            Box::new(
+              Assign {
+                name: "i".into(),
+                type_: Type::Simple("Int".into()),
+                expr: Expr::Lit(Lit::Int(1)),
+              }
+            )
+          ),
+          e2: Expr::Lit(Lit::Int(2))
+        }
       )
     )
   )]
@@ -434,9 +390,18 @@ mod test {
       sig: FunSig {
         name: "name".into(),
         args: Vec::from([
-          ("a".into(), Type::Simple("Int".into())),
-          ("b".into(), Type::Simple("Int".into())),
-          ("c".into(), Type::Simple("Int".into())),
+          FunArg {
+            name: "a".into(),
+            type_: Type::Simple("Int".into()),
+          },
+          FunArg {
+            name: "b".into(),
+            type_: Type::Simple("Int".into()),
+          },
+          FunArg {
+            name: "c".into(),
+            type_: Type::Simple("Int".into()),
+          },
         ]),
         rt: Type::Simple("Int".into()),
       },
@@ -468,7 +433,10 @@ mod test {
       Def::Fun(Fun {
         sig: FunSig {
           name: "f".into(),
-          args: Vec::from([("a".into(), Type::Simple("Int".into()))]),
+          args: Vec::from([FunArg {
+            name: "a".into(),
+            type_: Type::Simple("Int".into()),
+          }]),
           rt: Type::Simple("Int".into()),
         },
         body: (Expr::Lit(Lit::Int(1))),
@@ -477,8 +445,14 @@ mod test {
         sig: FunSig {
           name: "g".into(),
           args: Vec::from([
-            ("b".into(), Type::Simple("Int".into())),
-            ("c".into(), Type::Simple("Int".into())),
+            FunArg {
+              name: "b".into(),
+              type_: Type::Simple("Int".into()),
+            },
+            FunArg {
+              name: "c".into(),
+              type_: Type::Simple("Int".into()),
+            },
           ]),
           rt: Type::Simple("Int".into()),
         },
@@ -488,9 +462,18 @@ mod test {
         sig: FunSig {
           name: "h".into(),
           args: Vec::from([
-            ("d".into(), Type::Simple("Int".into())),
-            ("e".into(), Type::Simple("Int".into())),
-            ("f".into(), Type::Simple("Int".into())),
+            FunArg {
+              name: "d".into(),
+              type_: Type::Simple("Int".into()),
+            },
+            FunArg {
+              name: "e".into(),
+              type_: Type::Simple("Int".into()),
+            },
+            FunArg {
+              name: "f".into(),
+              type_: Type::Simple("Int".into()),
+            },
           ]),
           rt: Type::Simple("Int".into()),
         },
@@ -500,13 +483,22 @@ mod test {
         sig: FunSig {
           name: "i".into(),
           args: Vec::from([
-            ("a".into(), Type::Simple("Int".into())),
-            ("b".into(), Type::Simple("Int".into())),
-            ("c".into(), Type::Simple("Int".into())),
+            FunArg {
+              name: "a".into(),
+              type_: Type::Simple("Int".into()),
+            },
+            FunArg {
+              name: "b".into(),
+              type_: Type::Simple("Int".into()),
+            },
+            FunArg {
+              name: "c".into(),
+              type_: Type::Simple("Int".into()),
+            },
           ]),
           rt: Type::Simple("Int".into()),
         },
-        body: (Expr::Value("a".into())),
+        body: (Expr::Value(Value { name: "a".into() })),
       }),
     ]);
 
