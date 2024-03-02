@@ -30,8 +30,8 @@ impl Sortable<untyped::Struct> for untyped::Struct {
   ) -> Vec<MarkedNode<untyped::Struct>> {
     let mut inner_structs = Vec::new();
 
-    for (_, arg_type) in self.args.clone() {
-      let untyped::Type::Simple(struct_name) = arg_type else {
+    for untyped::StructArg { type_, .. } in self.args.clone() {
+      let untyped::Type::Simple(struct_name) = type_ else {
         continue
       };
 
@@ -156,21 +156,42 @@ mod test {
     let t1 = untyped::Struct {
       name: "T1".to_string(),
       args: Vec::from([
-        ("a".to_string(), Type::Simple("Int".to_string())),
-        ("b".to_string(), Type::Simple("T2".to_string())),
-        ("c".to_string(), Type::Simple("Bool".to_string())),
+        StructArg {
+          name: "a".to_string(),
+          type_: Type::Simple("Int".to_string()),
+        },
+        StructArg {
+          name: "b".to_string(),
+          type_: Type::Simple("T2".to_string()),
+        },
+        StructArg {
+          name: "c".to_string(),
+          type_: Type::Simple("Bool".to_string()),
+        },
       ]),
     };
     let t2 = untyped::Struct {
       name: "T2".to_string(),
-      args: Vec::from([("a".to_string(), Type::Simple("String".to_string()))]),
+      args: Vec::from([StructArg {
+        name: "a".to_string(),
+        type_: Type::Simple("String".to_string()),
+      }]),
     };
     let t3 = untyped::Struct {
       name: "T3".to_string(),
       args: Vec::from([
-        ("a".to_string(), Type::Simple("Int".to_string())),
-        ("b".to_string(), Type::Simple("T2".to_string())),
-        ("c".to_string(), Type::Simple("String".to_string())),
+        StructArg {
+          name: "a".to_string(),
+          type_: Type::Simple("Int".to_string()),
+        },
+        StructArg {
+          name: "b".to_string(),
+          type_: Type::Simple("T2".to_string()),
+        },
+        StructArg {
+          name: "c".to_string(),
+          type_: Type::Simple("String".to_string()),
+        },
       ]),
     };
     let structs = Vec::from([t1.clone(), t2.clone(), t3.clone()]);

@@ -40,7 +40,7 @@ impl ClosureManager {
 
   pub fn push(&mut self, name: String, type_: Type) {
     let tail = self.get_tail();
-    tail.push((name, type_))
+    tail.push(FunArg { name, type_ })
   }
 }
 
@@ -59,9 +59,18 @@ mod test {
   fn test_append(mut cm: ClosureManager) {
     // given
     let closure = Vec::from([
-      ("a".to_string(), Type::Simple(SimpleType::Int)),
-      ("b".to_string(), Type::Simple(SimpleType::Float)),
-      ("c".to_string(), Type::Simple(SimpleType::Bool)),
+      FunArg {
+        name: "a".to_string(),
+        type_: Type::Simple(SimpleType::Int),
+      },
+      FunArg {
+        name: "b".to_string(),
+        type_: Type::Simple(SimpleType::Float),
+      },
+      FunArg {
+        name: "c".to_string(),
+        type_: Type::Simple(SimpleType::Bool),
+      },
     ]);
     let expected_closures = Vec::from([closure.clone()]);
 

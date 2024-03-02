@@ -75,20 +75,20 @@ impl GlobalDeclCollector {
 
   fn get_inner_vals(&self, expr: Expr) -> Vec<String> {
     match expr {
-      Expr::BinOp(lh, _, rh) => self._map(Vec::from([*lh, *rh])),
+      Expr::BinOp(binop) => self._map(Vec::from([binop.lh, binop.rh])),
       Expr::Lit(_) => Vec::new(),
-      Expr::Value(v) => Vec::from([v]),
-      Expr::Function(_, _) => Vec::new(),
-      Expr::Assign(_, expr) => self.get_inner_vals(*expr),
-      Expr::Chain(lh, rh) => self._map(Vec::from([*lh, *rh])),
-      Expr::Call(_, args) => self._map(args),
-      Expr::If(ie, e1, e2) => self._map(Vec::from([*ie, *e1, *e2])),
-      Expr::Attr(_, _, _) => Vec::new(),
-      Expr::New(_, args) => self._map(args),
-      Expr::StringTemplate(_, args) => args,
-      Expr::MethodCall(this, _, _, args) => {
-        let mut args = args;
-        args.insert(0, *this);
+      Expr::Value(v) => Vec::from([v.name]),
+      Expr::Function(_) => Vec::new(),
+      Expr::Assign(assign) => self.get_inner_vals(assign.expr),
+      Expr::Chain(chain) => self._map(Vec::from([chain.e1, chain.e2])),
+      Expr::Call(call) => self._map(call.args),
+      Expr::If(if_) => self._map(Vec::from([if_.if_, if_.then, if_.else_])),
+      Expr::Attr(_) => Vec::new(),
+      Expr::New(new) => self._map(new.args),
+      Expr::StringTemplate(stringtemplate) => stringtemplate.args,
+      Expr::MethodCall(methodcall) => {
+        let mut args = methodcall.args;
+        args.insert(0, methodcall.this);
         self._map(args)
       }
     }

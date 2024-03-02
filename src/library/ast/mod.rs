@@ -25,24 +25,101 @@ pub enum Lit {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<T, C, S, TN> {
-  BinOp(Box<Self>, Op, Box<Self>),
+  BinOp(Box<BinOp<T, C, S, TN>>),
   Lit(Lit),
-  Value(String),
-  Function(Box<Fun<T, C, S, TN>>, C),
-  Assign((String, Type<T>), Box<Self>),
-  Chain(Box<Self>, Box<Self>),
-  Call(String, Vec<Self>),
-  If(Box<Self>, Box<Self>, Box<Self>),
-  Attr(String, S, String),
-  New(String, Vec<Self>),
-  StringTemplate(String, Vec<String>),
-  MethodCall(Box<Self>, TN, String, Vec<Self>),
+  Value(Value),
+  Function(Box<Function<T, C, S, TN>>),
+  Assign(Box<Assign<T, C, S, TN>>),
+  Chain(Box<Chain<T, C, S, TN>>),
+  Call(Call<T, C, S, TN>),
+  If(Box<If<T, C, S, TN>>),
+  Attr(Attr<S>),
+  New(New<T, C, S, TN>),
+  StringTemplate(StringTemplate),
+  MethodCall(Box<MethodCall<T, C, S, TN>>),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct BinOp<T, C, S, TN> {
+  pub lh: Expr<T, C, S, TN>,
+  pub op: Op,
+  pub rh: Expr<T, C, S, TN>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Value {
+  pub name: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Function<T, C, S, TN> {
+  pub f: Fun<T, C, S, TN>,
+  pub closure: C,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Assign<T, C, S, TN> {
+  pub name: String,
+  pub type_: Type<T>,
+  pub expr: Expr<T, C, S, TN>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Chain<T, C, S, TN> {
+  pub e1: Expr<T, C, S, TN>,
+  pub e2: Expr<T, C, S, TN>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Call<T, C, S, TN> {
+  pub name: String,
+  pub args: Vec<Expr<T, C, S, TN>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct If<T, C, S, TN> {
+  pub if_: Expr<T, C, S, TN>,
+  pub then: Expr<T, C, S, TN>,
+  pub else_: Expr<T, C, S, TN>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Attr<S> {
+  pub name: String,
+  pub struct_: S,
+  pub attr: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct New<T, C, S, TN> {
+  pub name: String,
+  pub args: Vec<Expr<T, C, S, TN>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct StringTemplate {
+  pub string: String,
+  pub args: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct MethodCall<T, C, S, TN> {
+  pub this: Expr<T, C, S, TN>,
+  pub typename: TN,
+  pub methodname: String,
+  pub args: Vec<Expr<T, C, S, TN>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct FunArg<T> {
+  pub name: String,
+  pub type_: Type<T>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunSig<T> {
   pub name: String,
-  pub args: Vec<(String, Type<T>)>,
+  pub args: Vec<FunArg<T>>,
   pub rt: Type<T>,
 }
 
@@ -53,9 +130,15 @@ pub struct Fun<T, C, S, TN> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct StructArg<T> {
+  pub name: String,
+  pub type_: Type<T>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Struct<T> {
   pub name: String,
-  pub args: Vec<(String, Type<T>)>,
+  pub args: Vec<StructArg<T>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -154,7 +237,7 @@ impl SimpleType {
   }
 }
 
-pub type Closure = Vec<(String, Type<SimpleType>)>;
+pub type Closure = Vec<FunArg<SimpleType>>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Decl<T> {
@@ -179,6 +262,15 @@ impl<T> Decl<T> {
 
 pub type Decls<T> = Vec<Decl<T>>;
 
+macro_rules! publish_type {
+  ($T: ident) => {
+    pub type $T = super::$T;
+  };
+  ($T: ident, [$($G: tt),*]) => {
+    pub type $T = super::$T<$($G),*>;
+  };
+}
+
 macro_rules! ast {
   (
     T = $T:ty,
@@ -188,35 +280,41 @@ macro_rules! ast {
     I = $I:ty,
     IS = $IS:ty,
   ) => {
-    #[allow(dead_code)]
-    pub type Op = super::Op;
-    #[allow(dead_code)]
-    pub type Lit = super::Lit;
-    pub type Expr = super::Expr<$T, $C, $S, $TN>;
-    #[allow(dead_code)]
-    pub type FunSig = super::FunSig<$T>;
-    pub type Fun = super::Fun<$T, $C, $S, $TN>;
-    pub type Struct = super::Struct<$T>;
-    #[allow(dead_code)]
-    pub type ValDecl = super::ValDecl<$T>;
-    pub type Val = super::Val<$T, $C, $S, $TN>;
-    pub type Class = super::Class<$T>;
-    pub type ImplDecl = super::ImplDecl<$T>;
-    pub type Impl = super::Impl<$T, $C, $S, $TN>;
+    publish_type!(Op);
+    publish_type!(Lit);
+    publish_type!(Expr, [$T, $C, $S, $TN]);
+    publish_type!(BinOp, [$T, $C, $S, $TN]);
+    publish_type!(Function, [$T, $C, $S, $TN]);
+    publish_type!(Assign, [$T, $C, $S, $TN]);
+    publish_type!(Chain, [$T, $C, $S, $TN]);
+    publish_type!(Call, [$T, $C, $S, $TN]);
+    publish_type!(If, [$T, $C, $S, $TN]);
+    publish_type!(New, [$T, $C, $S, $TN]);
+    publish_type!(Attr, [$S]);
+    publish_type!(Value);
+    publish_type!(StringTemplate);
+    publish_type!(MethodCall, [$T, $C, $S, $TN]);
+    publish_type!(FunArg, [$T]);
+    publish_type!(FunSig, [$T]);
+    publish_type!(Fun, [$T, $C, $S, $TN]);
+    publish_type!(StructArg, [$T]);
+    publish_type!(Struct, [$T]);
+    publish_type!(ValDecl, [$T]);
+    publish_type!(Val, [$T, $C, $S, $TN]);
+    publish_type!(Class, [$T]);
+    publish_type!(ImplDecl, [$T]);
+    publish_type!(Impl, [$T, $C, $S, $TN]);
     pub type Import = $I;
     #[allow(dead_code)]
     pub type Imports = $IS;
-    pub type Def = super::Def<$T, $C, $S, $TN, $I>;
-    pub type Mod = super::Mod<$T, $C, $S, $TN, $I, $IS>;
-    #[allow(dead_code)]
-    pub type Repl = super::Repl<$T, $C, $S, $TN, $I>;
-    pub type Type = super::Type<$T>;
-    #[allow(dead_code)]
-    pub type SimpleType = super::SimpleType;
-    #[allow(dead_code)]
-    pub type Closure = super::Closure;
-    pub type Decl = super::Decl<$T>;
-    pub type Decls = super::Decls<$T>;
+    publish_type!(Def, [$T, $C, $S, $TN, $I]);
+    publish_type!(Mod, [$T, $C, $S, $TN, $I, $IS]);
+    publish_type!(Repl, [$T, $C, $S, $TN, $I]);
+    publish_type!(Type, [$T]);
+    publish_type!(SimpleType);
+    publish_type!(Closure);
+    publish_type!(Decl, [$T]);
+    publish_type!(Decls, [$T]);
   };
 }
 
