@@ -37,22 +37,16 @@ pub trait ProcessTypecheckerNode {
   fn process(self, ctx: &mut Typechecker) -> Self::R;
 }
 
-macro_rules! define_map {
-  ($I: ty, $O: ty) => {
-    impl ProcessTypecheckerNode for Vec<$I> {
-      type R = Result<Vec<$O>>;
+impl ProcessTypecheckerNode for Vec<qualified::Def> {
+  type R = Result<Vec<typed::Def>>;
 
-      fn process(self, ctx: &mut Typechecker) -> Self::R {
-        self
-          .into_iter()
-          .map(|e| e.process(ctx))
-          .collect::<Result<_, _>>()
-      }
-    }
-  };
+  fn process(self, ctx: &mut Typechecker) -> Self::R {
+    self
+      .into_iter()
+      .map(|e| e.process(ctx))
+      .collect::<Result<_, _>>()
+  }
 }
-
-define_map!(qualified::Def, typed::Def);
 
 impl ProcessTypecheckerNode for qualified::Def {
   type R = Result<typed::Def>;
@@ -671,7 +665,7 @@ impl ProcessTypecheckerNode for qualified::MethodCall {
       typed::MethodCall {
         this: this.v,
         typename: t.get_name(),
-        methodname: methodname.clone(),
+        methodname,
         args,
       },
       fs.rt,
@@ -948,7 +942,7 @@ mod test {
     typechecker.values.insert(value.name.clone(), type_.clone());
     let expected_result = TypedValue {
       v: value.clone(),
-      t: type_.clone(),
+      t: type_,
     };
 
     // when

@@ -13,6 +13,6 @@ repos:
     -   id: cargo-check
         args: ["--verbose"]
     -   id: clippy
-        args: ["--verbose"]
+        args: ["--verbose", "--all"]
     -   id: fmt
         args: ["--verbose", "--check", "--"]

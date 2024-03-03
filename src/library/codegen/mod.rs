@@ -778,7 +778,7 @@ mod test {
 
   #[fixture]
   fn codegen(context: &'static Context) -> Codegen<'static> {
-    let codegen = Codegen::create(&context, false, true);
+    let codegen = Codegen::create(context, false, true);
     codegen
   }
 
