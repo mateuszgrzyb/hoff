@@ -4,7 +4,7 @@ mod import_qualifier;
 
 pub use global_decl_collector::GlobalDeclCollector;
 pub use global_decl_typechecker::GlobalDeclTypechecker;
-pub use import_qualifier::ImportQualifier;
+pub use import_qualifier::{ImportQualifier, ProcessImportQualifierNode};
 
 pub trait Nameable {
   fn get_name(&self) -> String;

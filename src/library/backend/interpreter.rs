@@ -7,7 +7,7 @@ use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
   codegen::{Codegen, ProcessCodegenNode as _},
-  qualify::ImportQualifier,
+  qualify::{ImportQualifier, ProcessImportQualifierNode as _},
   typecheck::{ProcessTypecheckerNode as _, Typechecker},
 };
 
@@ -103,7 +103,7 @@ impl<'ctx> Interpreter<'ctx> {
     };
 
     let defs = self.defs.clone();
-    let defs = self.qualifier.qualify_defs(defs)?;
+    let defs = defs.process(&self.qualifier)?;
     let mut defs = defs.process(&mut self.typechecker)?;
 
     defs.push(typed::Def::Fun(main));

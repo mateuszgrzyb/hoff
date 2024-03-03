@@ -12,7 +12,10 @@ use crate::library::{
   cli::{Args, DumpMode, RunMode},
   codegen::{Codegen, ProcessCodegenNode},
   parser::parse,
-  qualify::{GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier},
+  qualify::{
+    GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
+    ProcessImportQualifierNode,
+  },
   typecheck::Typechecker,
 };
 
@@ -122,7 +125,7 @@ impl Compile {
         Err(e) => Err(anyhow!(e.to_string())),
       };
 
-      qualifier?.qualify(module?)
+      module?.process(&qualifier?)
     })
   }
 
