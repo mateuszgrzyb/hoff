@@ -93,7 +93,7 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
     .into_iter()
     .map(|of| {
       read_to_string(of)
-        .map(|s| s.trim_end_matches("\n").to_string())
+        .map(|s| s.trim_end_matches('\n').to_string())
         .unwrap()
     })
     .collect::<Vec<_>>()
@@ -104,7 +104,7 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
 
   // then
   let stdout = String::from_utf8(output.stdout)
-    .map(|s| s.trim_end_matches("\n").to_string())
+    .map(|s| s.trim_end_matches('\n').to_string())
     .unwrap();
   let stderr = String::from_utf8(output.stderr).unwrap();
 

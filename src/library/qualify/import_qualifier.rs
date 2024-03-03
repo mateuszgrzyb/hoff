@@ -9,18 +9,18 @@ pub struct ImportQualifier {
   decls: Arc<Mutex<typed::Decls>>,
 }
 
-impl ImportQualifier {
-  pub fn create(global_decls: Arc<typed::Decls>) -> Self {
-    Self {
-      global_decls,
-      decls: Arc::new(Mutex::new(Vec::new())),
-    }
-  }
+pub trait ProcessImportQualifierNode {
+  type R;
+  fn process(self, ctx: &ImportQualifier) -> Self::R;
+}
 
-  pub fn qualify(&self, m: untyped::Mod) -> Result<qualified::Mod> {
-    let name = m.name;
-    let defs = self.qualify_defs(m.defs)?;
-    let imports = self._get_decls()?;
+impl ProcessImportQualifierNode for untyped::Mod {
+  type R = Result<qualified::Mod>;
+
+  fn process(self, ctx: &ImportQualifier) -> Self::R {
+    let name = self.name;
+    let defs = self.defs.process(ctx)?;
+    let imports = ctx._get_decls()?;
 
     Ok(qualified::Mod {
       name,
@@ -28,22 +28,25 @@ impl ImportQualifier {
       imports,
     })
   }
+}
 
-  pub fn qualify_defs(
-    &self,
-    defs: Vec<untyped::Def>,
-  ) -> Result<Vec<qualified::Def>> {
-    defs
+impl ProcessImportQualifierNode for Vec<untyped::Def> {
+  type R = Result<Vec<qualified::Def>>;
+
+  fn process(self, ctx: &ImportQualifier) -> Self::R {
+    self
       .into_par_iter()
-      .map(|d| self.qualify_def(d))
+      .map(|d| d.process(ctx))
       .collect::<Result<Vec<_>, _>>()
   }
+}
 
-  fn qualify_def(&self, d: untyped::Def) -> Result<qualified::Def> {
-    match d {
-      untyped::Def::Import(i) => {
-        self.qualify_import(i).map(qualified::Def::Import)
-      }
+impl ProcessImportQualifierNode for untyped::Def {
+  type R = Result<qualified::Def>;
+
+  fn process(self, ctx: &ImportQualifier) -> Self::R {
+    match self {
+      untyped::Def::Import(i) => i.process(ctx).map(qualified::Def::Import),
       untyped::Def::Fun(f) => Ok(qualified::Def::Fun(f)),
       untyped::Def::Struct(s) => Ok(qualified::Def::Struct(s)),
       untyped::Def::Val(v) => Ok(qualified::Def::Val(v)),
@@ -51,11 +54,15 @@ impl ImportQualifier {
       untyped::Def::Impl(i) => Ok(qualified::Def::Impl(i)),
     }
   }
+}
 
-  fn qualify_import(&self, i: untyped::Import) -> Result<qualified::Import> {
-    let (_, name) = i;
+impl ProcessImportQualifierNode for untyped::Import {
+  type R = Result<qualified::Import>;
 
-    let Some(d) = self
+  fn process(self, ctx: &ImportQualifier) -> Self::R {
+    let (_, name) = self;
+
+    let Some(d) = ctx
       .global_decls
       .iter()
       .find(|d| d.get_name() == &name)
@@ -66,7 +73,7 @@ impl ImportQualifier {
 
     // auto import all impls if class is imported
     if let typed::Decl::Class(c) = &d {
-      let class_impls = self
+      let class_impls = ctx
         .global_decls
         .iter()
         .filter_map(|d| match d {
@@ -78,11 +85,11 @@ impl ImportQualifier {
         .collect::<Vec<_>>();
       // TODO: OPTIMIZE PLZ, WHAT EVEN IS THIS YOU LAZY !!!
       for class_impl in class_impls {
-        self._push_decl_if_not_exist(class_impl)?
+        ctx._push_decl_if_not_exist(class_impl)?
       }
     };
 
-    self._push_decl(d.clone())?;
+    ctx._push_decl(d.clone())?;
 
     let i = match d {
       typed::Decl::Fun(f) => qualified::Import::Fun(f),
@@ -93,6 +100,15 @@ impl ImportQualifier {
     };
 
     Ok(i)
+  }
+}
+
+impl ImportQualifier {
+  pub fn create(global_decls: Arc<typed::Decls>) -> Self {
+    Self {
+      global_decls,
+      decls: Arc::new(Mutex::new(Vec::new())),
+    }
   }
 
   fn _push_decl_if_not_exist(&self, d: typed::Decl) -> Result<()> {

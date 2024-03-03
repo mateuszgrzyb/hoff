@@ -10,10 +10,13 @@ use crate::library::{
   ast::{qualified, typed, untyped},
   backend::{Backend, Compiler, JITExecutor},
   cli::{Args, DumpMode, RunMode},
-  codegen::CodeGen,
+  codegen::{Codegen, ProcessCodegenNode},
   parser::parse,
-  qualify::{GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier},
-  typecheck::TypeChecker,
+  qualify::{
+    GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
+    ProcessImportQualifierNode,
+  },
+  typecheck::Typechecker,
 };
 
 use self::utils::InputFile;
@@ -122,7 +125,7 @@ impl Compile {
         Err(e) => Err(anyhow!(e.to_string())),
       };
 
-      qualifier?.qualify(module?)
+      module?.process(&qualifier?)
     })
   }
 
@@ -133,13 +136,13 @@ impl Compile {
   where
     QMS: ParallelIterator<Item = Result<qualified::Mod>>,
   {
-    qms.map(|module| TypeChecker::create(module?).check())
+    qms.map(|module| Typechecker::create(module?).check())
   }
 
   fn compile_modules<TMS>(
     &self,
     tms: TMS,
-  ) -> impl Iterator<Item = Result<CodeGen>>
+  ) -> impl Iterator<Item = Result<Codegen>>
   where
     TMS: ParallelIterator<Item = Result<typed::Mod>>,
   {
@@ -147,8 +150,9 @@ impl Compile {
 
     evaluated_tms.into_iter().map(|module| {
       let mut codegen =
-        CodeGen::create(&self.context, true, self.args.sort_decls);
-      codegen.compile_module(module?);
+        Codegen::create(&self.context, true, self.args.sort_decls);
+
+      module?.process(&mut codegen);
       Ok(codegen)
     })
   }
@@ -156,9 +160,9 @@ impl Compile {
   fn verify_modules<'ctx, 'a, CGS>(
     &'a self,
     cgs: CGS,
-  ) -> impl Iterator<Item = Result<CodeGen<'ctx>>> + 'a
+  ) -> impl Iterator<Item = Result<Codegen<'ctx>>> + 'a
   where
-    CGS: Iterator<Item = Result<CodeGen<'ctx>>> + 'a,
+    CGS: Iterator<Item = Result<Codegen<'ctx>>> + 'a,
   {
     cgs.map(move |c| {
       let c = c?;
@@ -173,7 +177,7 @@ impl Compile {
 
   fn link_modules<'ctx, CGS>(&self, cgs: CGS) -> Result<Module<'ctx>>
   where
-    CGS: Iterator<Item = Result<CodeGen<'ctx>>>,
+    CGS: Iterator<Item = Result<Codegen<'ctx>>>,
   {
     cgs
       .map(|codegen| Ok(codegen?.module))

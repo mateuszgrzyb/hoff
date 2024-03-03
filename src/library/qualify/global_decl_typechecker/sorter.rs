@@ -23,11 +23,11 @@ pub trait Sortable<S> {
   ) -> Vec<MarkedNode<S>>;
 }
 
-impl Sortable<untyped::Struct> for untyped::Struct {
+impl Sortable<untyped::StructDef> for untyped::StructDef {
   fn get_inner(
     &self,
-    marks: HashMap<String, MarkedNode<untyped::Struct>>,
-  ) -> Vec<MarkedNode<untyped::Struct>> {
+    marks: HashMap<String, MarkedNode<untyped::StructDef>>,
+  ) -> Vec<MarkedNode<untyped::StructDef>> {
     let mut inner_structs = Vec::new();
 
     for untyped::StructArg { type_, .. } in self.args.clone() {
@@ -153,7 +153,7 @@ mod test {
   #[rstest]
   fn test_struct_sort() {
     // given
-    let t1 = untyped::Struct {
+    let t1 = untyped::StructDef {
       name: "T1".to_string(),
       args: Vec::from([
         StructArg {
@@ -170,14 +170,14 @@ mod test {
         },
       ]),
     };
-    let t2 = untyped::Struct {
+    let t2 = untyped::StructDef {
       name: "T2".to_string(),
       args: Vec::from([StructArg {
         name: "a".to_string(),
         type_: Type::Simple("String".to_string()),
       }]),
     };
-    let t3 = untyped::Struct {
+    let t3 = untyped::StructDef {
       name: "T3".to_string(),
       args: Vec::from([
         StructArg {

@@ -103,8 +103,8 @@ impl GlobalDeclTypechecker {
 
   fn check_structs(
     &mut self,
-    ss: Vec<untyped::Struct>,
-  ) -> Result<Vec<typed::Struct>> {
+    ss: Vec<untyped::StructDef>,
+  ) -> Result<Vec<typed::StructDef>> {
     let mut type_sorter = Sorter::create(ss);
     let ss = type_sorter.sort()?;
 
@@ -119,11 +119,11 @@ impl GlobalDeclTypechecker {
       .collect()
   }
 
-  fn check_struct(&self, s: untyped::Struct) -> Result<typed::Struct> {
+  fn check_struct(&self, s: untyped::StructDef) -> Result<typed::StructDef> {
     let name = s.name;
     let args = self.check_structargs(s.args)?;
 
-    Ok(typed::Struct { name, args })
+    Ok(typed::StructDef { name, args })
   }
 
   define_map_result!(check_funsig, untyped::FunSig, typed::FunSig);
@@ -158,9 +158,9 @@ impl GlobalDeclTypechecker {
     })
   }
 
-  define_map_result!(check_class, untyped::Class, typed::Class);
+  define_map_result!(check_class, untyped::ClassDef, typed::ClassDef);
 
-  fn check_class(&self, c: untyped::Class) -> Result<typed::Class> {
+  fn check_class(&self, c: untyped::ClassDef) -> Result<typed::ClassDef> {
     let name = c.name;
     let methods = c
       .methods
@@ -168,7 +168,7 @@ impl GlobalDeclTypechecker {
       .map(|m| self.check_funsig(m))
       .collect::<Result<_, _>>()?;
 
-    Ok(typed::Class { name, methods })
+    Ok(typed::ClassDef { name, methods })
   }
 
   define_map_result!(check_impl, untyped::ImplDecl, typed::ImplDecl);

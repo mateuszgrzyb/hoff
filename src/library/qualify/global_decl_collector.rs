@@ -11,6 +11,93 @@ pub struct GlobalDeclCollector {
   decls: Arc<Mutex<Decls>>,
 }
 
+pub trait ProcessGDCNode {
+  type R;
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R;
+}
+
+impl ProcessGDCNode for &Mod {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    for d in &self.defs {
+      d.process(ctx)?;
+    }
+
+    Ok(())
+  }
+}
+
+impl ProcessGDCNode for &Def {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    match self {
+      Def::Fun(f) => f.process(ctx),
+      Def::Struct(s) => s.process(ctx),
+      Def::Val(v) => v.process(ctx),
+      Def::Import(_) => Ok(()),
+      Def::Class(c) => c.process(ctx),
+      Def::Impl(i) => i.process(ctx),
+    }
+  }
+}
+
+impl ProcessGDCNode for &FunDef {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    let fundecl = ctx.get_fun_sig(self);
+    ctx._push_decl(Decl::Fun(fundecl))
+  }
+}
+
+impl ProcessGDCNode for &StructDef {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    ctx._push_decl(Decl::Struct(self.clone()))
+  }
+}
+
+impl ProcessGDCNode for &ValDef {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    let valdecl = ValDecl {
+      name: self.name.clone(),
+      t: self.t.clone(),
+      inner_vals: ctx.get_inner_vals(self.expr.clone()),
+    };
+    ctx._push_decl(Decl::Val(valdecl))
+  }
+}
+
+impl ProcessGDCNode for &ClassDef {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    let class = ClassDef {
+      name: self.name.clone(),
+      methods: self.methods.clone(),
+    };
+    ctx._push_decl(Decl::Class(class))
+  }
+}
+
+impl ProcessGDCNode for &ImplDef {
+  type R = Result<()>;
+
+  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+    let impldecl = ImplDecl {
+      class_name: self.class_name.clone(),
+      t: self.t.clone(),
+      impls: self.impls.clone().into_iter().map(|i| i.sig).collect(),
+    };
+    ctx._push_decl(Decl::Impl(impldecl))
+  }
+}
+
 impl GlobalDeclCollector {
   pub fn create() -> Self {
     Self {
@@ -22,54 +109,12 @@ impl GlobalDeclCollector {
   where
     MS: ParallelIterator<Item = Mod>,
   {
-    ms.try_for_each(|m| self.process_mod(&m))?;
+    ms.try_for_each(|m| m.process(self))?;
 
     self._return_decls()
   }
 
-  fn process_mod(&self, m: &Mod) -> Result<()> {
-    for d in &m.defs {
-      self.process_decl(d)?;
-    }
-
-    Ok(())
-  }
-
-  fn process_decl(&self, d: &Def) -> Result<()> {
-    match d {
-      Def::Fun(f) => {
-        let fundecl = self.get_fun_sig(f);
-        self._push_decl(Decl::Fun(fundecl))
-      }
-      Def::Struct(s) => self._push_decl(Decl::Struct(s.clone())),
-      Def::Val(v) => {
-        let valdecl = ValDecl {
-          name: v.name.clone(),
-          t: v.t.clone(),
-          inner_vals: self.get_inner_vals(v.expr.clone()),
-        };
-        self._push_decl(Decl::Val(valdecl))
-      }
-      Def::Import(_) => Ok(()),
-      Def::Class(c) => {
-        let class = Class {
-          name: c.name.clone(),
-          methods: c.methods.clone(),
-        };
-        self._push_decl(Decl::Class(class))
-      }
-      Def::Impl(i) => {
-        let impldecl = ImplDecl {
-          class_name: i.class_name.clone(),
-          t: i.t.clone(),
-          impls: i.impls.clone().into_iter().map(|i| i.sig).collect(),
-        };
-        self._push_decl(Decl::Impl(impldecl))
-      }
-    }
-  }
-
-  fn get_fun_sig(&self, f: &Fun) -> FunSig {
+  fn get_fun_sig(&self, f: &FunDef) -> FunSig {
     f.sig.clone()
   }
 

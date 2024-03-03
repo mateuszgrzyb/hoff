@@ -6,15 +6,15 @@ use inkwell::{context::Context, execution_engine::ExecutionEngine};
 use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
-  codegen::CodeGen,
-  qualify::ImportQualifier,
-  typecheck::TypeChecker,
+  codegen::{Codegen, ProcessCodegenNode as _},
+  qualify::{ImportQualifier, ProcessImportQualifierNode as _},
+  typecheck::{ProcessTypecheckerNode as _, Typechecker},
 };
 
 pub struct Interpreter<'ctx> {
-  typechecker: TypeChecker,
+  typechecker: Typechecker,
   qualifier: ImportQualifier,
-  codegen: CodeGen<'ctx>,
+  codegen: Codegen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
   defs: Vec<untyped::Def>,
 }
@@ -26,7 +26,7 @@ impl<'ctx> Interpreter<'ctx> {
     opt_level: u8,
   ) -> Self {
     let opt_level = get_opt_level(opt_level);
-    let codegen = CodeGen::create(context, true, false);
+    let codegen = Codegen::create(context, true, false);
     let execution_engine = codegen
       .module
       .create_jit_execution_engine(opt_level)
@@ -35,7 +35,7 @@ impl<'ctx> Interpreter<'ctx> {
     let import_qualifier = ImportQualifier::create(global_decls);
 
     Self {
-      typechecker: TypeChecker::create_empty(),
+      typechecker: Typechecker::create_empty(),
       qualifier: import_qualifier,
       codegen,
       execution_engine,
@@ -55,7 +55,7 @@ impl<'ctx> Interpreter<'ctx> {
 
     let main_mod = self.create_main(body, rt.clone())?;
 
-    self.codegen.compile_module(main_mod);
+    main_mod.process(&mut self.codegen);
 
     let return_value_repr = unsafe {
       let Ok(main) = self.execution_engine.get_function_value("main") else {
@@ -93,7 +93,7 @@ impl<'ctx> Interpreter<'ctx> {
     body: typed::Expr,
     rt: typed::Type,
   ) -> Result<typed::Mod> {
-    let main = typed::Fun {
+    let main = typed::FunDef {
       sig: typed::FunSig {
         name: "main".to_string(),
         args: Vec::new(),
@@ -103,8 +103,8 @@ impl<'ctx> Interpreter<'ctx> {
     };
 
     let defs = self.defs.clone();
-    let defs = self.qualifier.qualify_defs(defs)?;
-    let mut defs = self.typechecker.typecheck_defs(defs)?;
+    let defs = defs.process(&self.qualifier)?;
+    let mut defs = defs.process(&mut self.typechecker)?;
 
     defs.push(typed::Def::Fun(main));
 
