@@ -18,7 +18,7 @@ use crate::library::{ast::typed::*, codegen::types::Types, utils::MethodNamer};
 
 use super::ast::FunArg;
 
-pub struct CodeGen<'ctx> {
+pub struct Codegen<'ctx> {
   context: &'ctx Context,
   sort_decls: bool,
   pub module: Module<'ctx>,
@@ -34,15 +34,15 @@ pub struct CodeGen<'ctx> {
 
 type V<'ctx> = BasicValueEnum<'ctx>;
 
-pub trait ProcessASTNode<'ctx> {
+pub trait ProcessCodegenNode<'ctx> {
   type R;
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R;
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R;
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Mod {
+impl<'ctx> ProcessCodegenNode<'ctx> for Mod {
   type R = ();
 
-  fn process(mut self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(mut self, ctx: &mut Codegen<'ctx>) -> Self::R {
     // TODO: Fix if tests are flaky again...
     if ctx.sort_decls {
       self.imports.sort_by_key(|i| i.get_name().clone());
@@ -81,18 +81,18 @@ impl<'ctx> ProcessASTNode<'ctx> for Mod {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for FunSig {
+impl<'ctx> ProcessCodegenNode<'ctx> for FunSig {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     ctx.compile_fun_sig(self, Vec::new());
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for ValDecl {
+impl<'ctx> ProcessCodegenNode<'ctx> for ValDecl {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let f = FunSig {
       name: self.name,
       args: Vec::new(),
@@ -102,10 +102,10 @@ impl<'ctx> ProcessASTNode<'ctx> for ValDecl {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Def {
+impl<'ctx> ProcessCodegenNode<'ctx> for Def {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     match self {
       Def::Fun(f) => {
         Function {
@@ -133,10 +133,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Def {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Struct {
+impl<'ctx> ProcessCodegenNode<'ctx> for Struct {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let name = self.name;
     let args = self
       .args
@@ -155,19 +155,19 @@ impl<'ctx> ProcessASTNode<'ctx> for Struct {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Function {
+impl<'ctx> ProcessCodegenNode<'ctx> for Function {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let function = ctx.compile_fun_sig(self.f.sig.clone(), self.closure.clone());
     ctx.compile_fun_body(self.f, self.closure, function)
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Val {
+impl<'ctx> ProcessCodegenNode<'ctx> for Val {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     Function {
       f: Fun {
         sig: FunSig {
@@ -183,10 +183,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Val {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Impl {
+impl<'ctx> ProcessCodegenNode<'ctx> for Impl {
   type R = ();
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     for method in self.impls.clone() {
       let method_name = self.get_method_name_by_sig(&method.sig);
       let function = ctx.functions.get(&method_name).unwrap();
@@ -195,10 +195,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Impl {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Expr {
+impl<'ctx> ProcessCodegenNode<'ctx> for Expr {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     match self {
       Expr::BinOp(binop) => binop.process(ctx),
       Expr::Lit(l) => l.process(ctx),
@@ -216,10 +216,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Expr {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for BinOp {
+impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let lh = self.lh.process(ctx);
     let rh = self.rh.process(ctx);
 
@@ -286,10 +286,10 @@ impl<'ctx> ProcessASTNode<'ctx> for BinOp {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Lit {
+impl<'ctx> ProcessCodegenNode<'ctx> for Lit {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let ts = &ctx.types;
     match self {
       Lit::Int(i) => ts.int.const_int(i as u64, false).as_basic_value_enum(),
@@ -306,10 +306,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Lit {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Value {
+impl<'ctx> ProcessCodegenNode<'ctx> for Value {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let n = self.name.as_str();
 
     if let Some(value) = ctx.closure.get(n) {
@@ -333,29 +333,29 @@ impl<'ctx> ProcessASTNode<'ctx> for Value {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Assign {
+impl<'ctx> ProcessCodegenNode<'ctx> for Assign {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let val = self.expr.process(ctx);
     ctx.values.insert(self.name, val);
     val
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Chain {
+impl<'ctx> ProcessCodegenNode<'ctx> for Chain {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     self.e1.process(ctx);
     self.e2.process(ctx)
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Call {
+impl<'ctx> ProcessCodegenNode<'ctx> for Call {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let f = *ctx.functions.get(self.name.as_str()).unwrap();
     let closure = ctx
       .closures
@@ -458,10 +458,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Call {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for If {
+impl<'ctx> ProcessCodegenNode<'ctx> for If {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let if_ = self.if_.process(ctx);
     let then = self.then.process(ctx);
     let else_ = self.else_.process(ctx);
@@ -471,10 +471,10 @@ impl<'ctx> ProcessASTNode<'ctx> for If {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for Attr {
+impl<'ctx> ProcessCodegenNode<'ctx> for Attr {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let ptr = ctx
       .values
       .get(self.name.as_str())
@@ -498,10 +498,10 @@ impl<'ctx> ProcessASTNode<'ctx> for Attr {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for New {
+impl<'ctx> ProcessCodegenNode<'ctx> for New {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let struct_type = ctx.context.get_struct_type(self.name.as_str()).unwrap();
 
     let struct_args = self
@@ -522,10 +522,10 @@ impl<'ctx> ProcessASTNode<'ctx> for New {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for StringTemplate {
+impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplate {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let mut values: Vec<BasicMetadataValueEnum<'ctx>> = self
       .args
       .into_iter()
@@ -556,10 +556,10 @@ impl<'ctx> ProcessASTNode<'ctx> for StringTemplate {
   }
 }
 
-impl<'ctx> ProcessASTNode<'ctx> for MethodCall {
+impl<'ctx> ProcessCodegenNode<'ctx> for MethodCall {
   type R = V<'ctx>;
 
-  fn process(self, ctx: &mut CodeGen<'ctx>) -> Self::R {
+  fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let name = self.typename.get_method_name(&self.methodname);
     let mut args = self.args;
     args.insert(0, self.this);
@@ -567,7 +567,7 @@ impl<'ctx> ProcessASTNode<'ctx> for MethodCall {
   }
 }
 
-impl<'ctx> CodeGen<'ctx> {
+impl<'ctx> Codegen<'ctx> {
   pub fn create(context: &'ctx Context, add_stdlib: bool, sort_decls: bool) -> Self {
     let module = context.create_module("sum");
     let types = Types {
@@ -777,13 +777,13 @@ mod test {
   }
 
   #[fixture]
-  fn codegen(context: &'static Context) -> CodeGen<'static> {
-    let codegen = CodeGen::create(&context, false, true);
+  fn codegen(context: &'static Context) -> Codegen<'static> {
+    let codegen = Codegen::create(&context, false, true);
     codegen
   }
 
   #[rstest]
-  fn test_1(mut codegen: CodeGen) {
+  fn test_1(mut codegen: Codegen) {
     // given
     let m = Mod {
       name: "test_1".to_string(),

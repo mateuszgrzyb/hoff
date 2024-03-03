@@ -10,7 +10,7 @@ use rayon::{iter::once, prelude::*};
 
 use crate::library::{
   cli::{Args, DumpTarget},
-  codegen::CodeGen,
+  codegen::Codegen,
   qualify::Nameable,
 };
 
@@ -35,7 +35,7 @@ where
 
 pub fn dump_llvm<'ctx, CGS>(args: &Args, codegens: CGS) -> Result<()>
 where
-  CGS: Iterator<Item = Result<CodeGen<'ctx>>>,
+  CGS: Iterator<Item = Result<Codegen<'ctx>>>,
 {
   for codegen in codegens {
     let codegen = codegen?;

@@ -6,15 +6,15 @@ use inkwell::{context::Context, execution_engine::ExecutionEngine};
 use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
-  codegen::{CodeGen, ProcessASTNode as _},
+  codegen::{Codegen, ProcessCodegenNode as _},
   qualify::ImportQualifier,
-  typecheck::TypeChecker,
+  typecheck::{ProcessTypecheckerNode as _, Typechecker},
 };
 
 pub struct Interpreter<'ctx> {
-  typechecker: TypeChecker,
+  typechecker: Typechecker,
   qualifier: ImportQualifier,
-  codegen: CodeGen<'ctx>,
+  codegen: Codegen<'ctx>,
   execution_engine: ExecutionEngine<'ctx>,
   defs: Vec<untyped::Def>,
 }
@@ -22,7 +22,7 @@ pub struct Interpreter<'ctx> {
 impl<'ctx> Interpreter<'ctx> {
   pub fn create(global_decls: Arc<typed::Decls>, context: &'ctx Context, opt_level: u8) -> Self {
     let opt_level = get_opt_level(opt_level);
-    let codegen = CodeGen::create(context, true, false);
+    let codegen = Codegen::create(context, true, false);
     let execution_engine = codegen
       .module
       .create_jit_execution_engine(opt_level)
@@ -31,7 +31,7 @@ impl<'ctx> Interpreter<'ctx> {
     let import_qualifier = ImportQualifier::create(global_decls);
 
     Self {
-      typechecker: TypeChecker::create_empty(),
+      typechecker: Typechecker::create_empty(),
       qualifier: import_qualifier,
       codegen,
       execution_engine,
@@ -96,7 +96,7 @@ impl<'ctx> Interpreter<'ctx> {
 
     let defs = self.defs.clone();
     let defs = self.qualifier.qualify_defs(defs)?;
-    let mut defs = self.typechecker.typecheck_defs(defs)?;
+    let mut defs = defs.process(&mut self.typechecker)?;
 
     defs.push(typed::Def::Fun(main));
 
