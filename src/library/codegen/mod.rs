@@ -112,7 +112,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Def {
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     match self {
       Def::Fun(f) => {
-        Function {
+        FunctionExpr {
           f,
           closure: Vec::new(),
         }
@@ -137,7 +137,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Def {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Struct {
+impl<'ctx> ProcessCodegenNode<'ctx> for StructDef {
   type R = ();
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -159,7 +159,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Struct {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Function {
+impl<'ctx> ProcessCodegenNode<'ctx> for FunctionExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -169,12 +169,12 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Function {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Val {
+impl<'ctx> ProcessCodegenNode<'ctx> for ValDef {
   type R = ();
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
-    Function {
-      f: Fun {
+    FunctionExpr {
+      f: FunDef {
         sig: FunSig {
           name: self.name,
           args: Vec::new(),
@@ -188,7 +188,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Val {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Impl {
+impl<'ctx> ProcessCodegenNode<'ctx> for ImplDef {
   type R = ();
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -221,7 +221,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Expr {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
+impl<'ctx> ProcessCodegenNode<'ctx> for BinOpExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -294,19 +294,23 @@ impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Lit {
+impl<'ctx> ProcessCodegenNode<'ctx> for LitExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let ts = &ctx.types;
     match self {
-      Lit::Int(i) => ts.int.const_int(i as u64, false).as_basic_value_enum(),
-      Lit::Bool(b) => ts.bool.const_int(b.into(), false).as_basic_value_enum(),
-      Lit::Float(f) => ts
+      LitExpr::Int(i) => {
+        ts.int.const_int(i as u64, false).as_basic_value_enum()
+      }
+      LitExpr::Bool(b) => {
+        ts.bool.const_int(b.into(), false).as_basic_value_enum()
+      }
+      LitExpr::Float(f) => ts
         .float
         .const_float(f.parse().unwrap())
         .as_basic_value_enum(),
-      Lit::String(s) => ctx
+      LitExpr::String(s) => ctx
         .builder
         .build_global_string_ptr(&s, "")
         .unwrap()
@@ -315,7 +319,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Lit {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Value {
+impl<'ctx> ProcessCodegenNode<'ctx> for ValueExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -343,7 +347,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Value {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Assign {
+impl<'ctx> ProcessCodegenNode<'ctx> for AssignExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -353,7 +357,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Assign {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Chain {
+impl<'ctx> ProcessCodegenNode<'ctx> for ChainExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -362,7 +366,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Chain {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Call {
+impl<'ctx> ProcessCodegenNode<'ctx> for CallExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -469,7 +473,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Call {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for If {
+impl<'ctx> ProcessCodegenNode<'ctx> for IfExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -483,7 +487,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for If {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for Attr {
+impl<'ctx> ProcessCodegenNode<'ctx> for AttrExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -513,7 +517,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Attr {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for New {
+impl<'ctx> ProcessCodegenNode<'ctx> for NewExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
@@ -537,14 +541,14 @@ impl<'ctx> ProcessCodegenNode<'ctx> for New {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplate {
+impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplateExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let mut values: Vec<BasicMetadataValueEnum<'ctx>> = self
       .args
       .into_iter()
-      .map(|value| Value { name: value }.process(ctx).into())
+      .map(|value| ValueExpr { name: value }.process(ctx).into())
       .collect::<Vec<_>>();
 
     let b = &ctx.builder;
@@ -575,14 +579,14 @@ impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplate {
   }
 }
 
-impl<'ctx> ProcessCodegenNode<'ctx> for MethodCall {
+impl<'ctx> ProcessCodegenNode<'ctx> for MethodCallExpr {
   type R = V<'ctx>;
 
   fn process(self, ctx: &mut Codegen<'ctx>) -> Self::R {
     let name = self.typename.get_method_name(&self.methodname);
     let mut args = self.args;
     args.insert(0, self.this);
-    Call { name, args }.process(ctx)
+    CallExpr { name, args }.process(ctx)
   }
 }
 
@@ -744,7 +748,7 @@ impl<'ctx> Codegen<'ctx> {
 
   fn compile_fun_body(
     &mut self,
-    f: Fun,
+    f: FunDef,
     closure: Closure,
     function: FunctionValue<'ctx>,
   ) -> V<'ctx> {
@@ -821,7 +825,7 @@ mod test {
     let m = Mod {
       name: "test_1".to_string(),
       defs: Vec::from([
-        Def::Struct(Struct {
+        Def::Struct(StructDef {
           name: "Foo".to_string(),
           args: Vec::from([
             StructArg {
@@ -838,12 +842,12 @@ mod test {
             },
           ]),
         }),
-        Def::Fun(Fun {
+        Def::Fun(FunDef {
           sig: FunSig {
             name: "f1".to_string(),
             args: Vec::from([FunArg {
               name: "a".to_string(),
-              type_: Type::Simple(SimpleType::Struct(Struct {
+              type_: Type::Simple(SimpleType::Struct(StructDef {
                 name: "Foo".to_string(),
                 args: Vec::from([
                   StructArg {
@@ -863,7 +867,7 @@ mod test {
             }]),
             rt: Type::Simple(SimpleType::Int),
           },
-          body: Expr::Lit(Lit::Int(32)),
+          body: Expr::Lit(LitExpr::Int(32)),
         }),
       ]),
       imports: Decls::default(),

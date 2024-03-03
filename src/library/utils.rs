@@ -2,7 +2,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::library::ast::{
-  typed::{FunSig, Impl, ImplDecl},
+  typed::{FunSig, ImplDecl, ImplDef},
   SimpleType,
 };
 
@@ -36,7 +36,7 @@ impl MethodNamer for SimpleType {
   }
 }
 
-impl MethodNamer for Impl {
+impl MethodNamer for ImplDef {
   fn get_method_name(&self, name: &str) -> String {
     self.t.get_method_name(name)
   }

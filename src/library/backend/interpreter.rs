@@ -93,7 +93,7 @@ impl<'ctx> Interpreter<'ctx> {
     body: typed::Expr,
     rt: typed::Type,
   ) -> Result<typed::Mod> {
-    let main = typed::Fun {
+    let main = typed::FunDef {
       sig: typed::FunSig {
         name: "main".to_string(),
         args: Vec::new(),

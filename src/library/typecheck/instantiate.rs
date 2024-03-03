@@ -1,7 +1,7 @@
 use macros::define_map;
 
 use crate::library::ast::typed::{
-  Fun, FunSig, Impl, ImplDecl, SimpleType, Type,
+  FunDef, FunSig, ImplDecl, ImplDef, SimpleType, Type,
 };
 
 trait InstantiateSubject {
@@ -28,29 +28,29 @@ trait InstantiateSubject {
     FunSig { name, args, rt }
   }
 
-  fn instantiate_fun(&self, f: Fun) -> Fun {
+  fn instantiate_fun(&self, f: FunDef) -> FunDef {
     let sig = self.instantiate_funsig(f.sig);
     let body = f.body;
 
-    Fun { sig, body }
+    FunDef { sig, body }
   }
 
   define_map!(instantiate_funsig, FunSig);
 
-  define_map!(instantiate_fun, Fun);
+  define_map!(instantiate_fun, FunDef);
 }
 
 pub trait Instantiate {
   fn instantiate(&self) -> Self;
 }
 
-impl InstantiateSubject for Impl {
+impl InstantiateSubject for ImplDef {
   fn get_type(&self) -> SimpleType {
     self.t.clone()
   }
 }
 
-impl Instantiate for Impl {
+impl Instantiate for ImplDef {
   fn instantiate(&self) -> Self {
     let class_name = self.class_name.clone();
     let t = self.t.clone();

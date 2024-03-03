@@ -3,10 +3,10 @@ use peg::*;
 
 use crate::library::ast::untyped::*;
 
-use super::ast::BinOp;
+use super::ast::BinOpExpr;
 
 fn binop(lh: Expr, op: Op, rh: Expr) -> Expr {
-  Expr::BinOp(Box::new(BinOp { lh, op, rh }))
+  Expr::BinOp(Box::new(BinOpExpr { lh, op, rh }))
 }
 
 // Precedence
@@ -43,7 +43,7 @@ parser! {
     pub rule val() -> Def
       = "val" _ tid:typedid() __ "=" __ expr:expr() {
         let (name, t) = tid;
-        Def::Val(Val{ name, t, expr })
+        Def::Val(ValDef{ name, t, expr })
       }
 
     pub rule fun_sig() -> FunSig
@@ -51,9 +51,9 @@ parser! {
         FunSig { name: n, args: a.into_iter().map(|(name, type_)| FunArg { name, type_ }).collect(), rt: t }
       }
 
-    pub rule _fun() -> Fun
+    pub rule _fun() -> FunDef
       = sig:fun_sig() __ "{" __ body:expr() __ "}" {
-        Fun { sig, body }
+        FunDef { sig, body }
       }
 
     pub rule fun() -> Def
@@ -61,7 +61,7 @@ parser! {
 
     pub rule struct_() -> Def
       = "type" _ name:tid() __ "{" __ args:(typedid() ** (__ "," __)) __ "}" {
-        Def::Struct(Struct { name, args: args.into_iter().map(|(name, type_)| StructArg { name, type_ }).collect() })
+        Def::Struct(StructDef { name, args: args.into_iter().map(|(name, type_)| StructArg { name, type_ }).collect() })
       }
 
     pub rule import() -> Def
@@ -71,25 +71,25 @@ parser! {
 
     pub rule class() -> Def
       = "class" _ name:tid() __ "{" __ methods:(fun_sig() ** __) __ "}" {
-        Def::Class(Class { name, methods })
+        Def::Class(ClassDef { name, methods })
       }
 
     pub rule impl_() -> Def
       = "impl" _ class_name:tid() _ "for" _ t:tid() __ "{" __ impls:(_fun() ** __) __ "}" {
-        Def::Impl(Impl { class_name, t, impls })
+        Def::Impl(ImplDef { class_name, t, impls })
       }
 
     // Expr
 
     pub rule expr() -> Expr
       = precedence!{
-        x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(Chain { e1: x, e2: y })) }
+        x:(@)  __ ";"  __ y:@ { Expr::Chain(Box::new(ChainExpr { e1: x, e2: y })) }
         --
-        "val" _ tid:typedid() __ "=" __ expr:@ { Expr::Assign(Box::new(Assign { name: tid.0, type_: tid.1, expr})) }
+        "val" _ tid:typedid() __ "=" __ expr:@ { Expr::Assign(Box::new(AssignExpr { name: tid.0, type_: tid.1, expr})) }
         --
-        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(MethodCall { this: t, typename: (), methodname: m, args: a })) }
+        t:@ __ "::" __ m:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" { Expr::MethodCall(Box::new(MethodCallExpr { this: t, typename: (), methodname: m, args: a })) }
         --
-        i:id() __ "->" __ a:id() { Expr::Attr(Attr { name: i, struct_: (), attr: a }) }
+        i:id() __ "->" __ a:id() { Expr::Attr(AttrExpr { name: i, struct_: (), attr: a }) }
         --
         x:(@)  __ "&&" __ y:@ { binop(x, Op::And, y) }
         x:(@)  __ "||" __ y:@ { binop(x, Op::Or, y) }
@@ -122,7 +122,7 @@ parser! {
 
     pub rule str_temp() -> Expr
       // = s:__str_temp() { Expr::StringTemplate(s.0, s.1) }
-      = s:__str_temp() { Expr::StringTemplate(StringTemplate { string: s.0, args: s.1 }) }
+      = s:__str_temp() { Expr::StringTemplate(StringTemplateExpr { string: s.0, args: s.1 }) }
 
     rule __str_temp() -> (String, Vec<String>)
       = "$\"" s:__str_temp_body() "\""  {
@@ -147,47 +147,47 @@ parser! {
     pub rule lit() -> Expr
       = l:(lit_float() / lit_int() / lit_bool() / lit_string()) { Expr::Lit(l) }
 
-    pub rule lit_int() -> Lit
-      = n:numeric() { Lit::Int(n) }
+    pub rule lit_int() -> LitExpr
+      = n:numeric() { LitExpr::Int(n) }
 
-    pub rule lit_float() -> Lit
-      = f:float_num() { Lit::Float(f) }
+    pub rule lit_float() -> LitExpr
+      = f:float_num() { LitExpr::Float(f) }
 
-    pub rule lit_bool() -> Lit
-      = b:bool() { Lit::Bool(b) }
+    pub rule lit_bool() -> LitExpr
+      = b:bool() { LitExpr::Bool(b) }
 
-    pub rule lit_string() -> Lit
-      = s:str() { Lit::String(s) }
+    pub rule lit_string() -> LitExpr
+      = s:str() { LitExpr::String(s) }
 
     // If
 
     pub rule if_() -> Expr
       = "if" _ be:expr() __ "{" __ e1:expr() __ "}" __ "else" __ "{" __ e2:expr() __ "}" {
-        Expr::If(Box::new(If { if_: be, then: e1, else_: e2 }))
+        Expr::If(Box::new(IfExpr { if_: be, then: e1, else_: e2 }))
       }
 
     // Name
 
     pub rule name() -> Expr
-      = i:id() { Expr::Value(Value { name: i }) }
+      = i:id() { Expr::Value(ValueExpr { name: i }) }
 
     // Call
 
     pub rule call() -> Expr
       = i:id() __ "(" __ a:(expr() ** (__ "," __)) __ ")" {
-        Expr::Call(Call { name: i, args: a })
+        Expr::Call(CallExpr { name: i, args: a })
       }
 
     // Fun expr
 
     pub rule fun_expr() -> Expr
-      = f:_fun() { Expr::Function(Box::new(Function { f, closure: () })) }
+      = f:_fun() { Expr::Function(Box::new(FunctionExpr { f, closure: () })) }
 
     // New
 
     pub rule new() -> Expr
       = t:tid() __ "{" __ a:(expr() ** (__ "," __)) __ "}" {
-        Expr::New(New { name: t, args: a })
+        Expr::New(NewExpr { name: t, args: a })
       }
 
     // ---- utils ----
@@ -247,12 +247,12 @@ mod test {
   use crate::library::ast::untyped::*;
 
   #[rstest]
-  #[case::int("1", Lit::Int(1))]
-  #[case::float("33.0", Lit::Float("33.0".into()))]
-  #[case::bool_t("true", Lit::Bool(true))]
-  #[case::bool_f("false", Lit::Bool(false))]
-  #[case::string("\"ala\"", Lit::String("ala".into()))]
-  fn test_lit(#[case] lit_text: &str, #[case] exp_lit: Lit) {
+  #[case::int("1", LitExpr::Int(1))]
+  #[case::float("33.0", LitExpr::Float("33.0".into()))]
+  #[case::bool_t("true", LitExpr::Bool(true))]
+  #[case::bool_f("false", LitExpr::Bool(false))]
+  #[case::string("\"ala\"", LitExpr::String("ala".into()))]
+  fn test_lit(#[case] lit_text: &str, #[case] exp_lit: LitExpr) {
     // given
     let exp_lit_expr = Expr::Lit(exp_lit);
 
@@ -274,10 +274,10 @@ mod test {
   ) {
     // given
     let (lh, op, rh) = exp_binop_args;
-    let exp_binop_ast = Expr::BinOp(Box::new(BinOp {
-      lh: Expr::Value(Value { name: lh.into() }),
+    let exp_binop_ast = Expr::BinOp(Box::new(BinOpExpr {
+      lh: Expr::Value(ValueExpr { name: lh.into() }),
       op,
-      rh: Expr::Value(Value { name: rh.into() }),
+      rh: Expr::Value(ValueExpr { name: rh.into() }),
     }));
 
     // when
@@ -290,26 +290,26 @@ mod test {
   type S = &'static str;
 
   fn ternop_r(a: S, op1: Op, (b, op2, c): (S, Op, S)) -> Expr {
-    Expr::BinOp(Box::new(BinOp {
-      lh: Expr::Value(Value { name: a.into() }),
+    Expr::BinOp(Box::new(BinOpExpr {
+      lh: Expr::Value(ValueExpr { name: a.into() }),
       op: op1,
-      rh: Expr::BinOp(Box::new(BinOp {
-        lh: Expr::Value(Value { name: b.into() }),
+      rh: Expr::BinOp(Box::new(BinOpExpr {
+        lh: Expr::Value(ValueExpr { name: b.into() }),
         op: op2,
-        rh: Expr::Value(Value { name: c.into() }),
+        rh: Expr::Value(ValueExpr { name: c.into() }),
       })),
     }))
   }
 
   fn ternop_l((a, op1, b): (S, Op, S), op2: Op, c: S) -> Expr {
-    Expr::BinOp(Box::new(BinOp {
-      lh: Expr::BinOp(Box::new(BinOp {
-        lh: Expr::Value(Value { name: a.into() }),
+    Expr::BinOp(Box::new(BinOpExpr {
+      lh: Expr::BinOp(Box::new(BinOpExpr {
+        lh: Expr::Value(ValueExpr { name: a.into() }),
         op: op1,
-        rh: Expr::Value(Value { name: b.into() }),
+        rh: Expr::Value(ValueExpr { name: b.into() }),
       })),
       op: op2,
-      rh: Expr::Value(Value { name: c.into() }),
+      rh: Expr::Value(ValueExpr { name: c.into() }),
     }))
   }
 
@@ -359,17 +359,17 @@ mod test {
     "val i: Int = 1; 2",
     Expr::Chain(
       Box::new(
-        Chain {
+        ChainExpr {
           e1: Expr::Assign(
             Box::new(
-              Assign {
+              AssignExpr {
                 name: "i".into(),
                 type_: Type::Simple("Int".into()),
-                expr: Expr::Lit(Lit::Int(1)),
+                expr: Expr::Lit(LitExpr::Int(1)),
               }
             )
           ),
-          e2: Expr::Lit(Lit::Int(2))
+          e2: Expr::Lit(LitExpr::Int(2))
         }
       )
     )
@@ -386,7 +386,7 @@ mod test {
   fn test_fun() {
     // given
     let fn_text = r#"fun name (a: Int, b: Int, c: Int): Int { 33 }"#;
-    let exp_fn_ast = Def::Fun(Fun {
+    let exp_fn_ast = Def::Fun(FunDef {
       sig: FunSig {
         name: "name".into(),
         args: Vec::from([
@@ -405,7 +405,7 @@ mod test {
         ]),
         rt: Type::Simple("Int".into()),
       },
-      body: (Expr::Lit(Lit::Int(33))),
+      body: (Expr::Lit(LitExpr::Int(33))),
     });
 
     // when
@@ -430,7 +430,7 @@ mod test {
 
         "#;
     let exp_ast = Vec::from([
-      Def::Fun(Fun {
+      Def::Fun(FunDef {
         sig: FunSig {
           name: "f".into(),
           args: Vec::from([FunArg {
@@ -439,9 +439,9 @@ mod test {
           }]),
           rt: Type::Simple("Int".into()),
         },
-        body: (Expr::Lit(Lit::Int(1))),
+        body: (Expr::Lit(LitExpr::Int(1))),
       }),
-      Def::Fun(Fun {
+      Def::Fun(FunDef {
         sig: FunSig {
           name: "g".into(),
           args: Vec::from([
@@ -456,9 +456,9 @@ mod test {
           ]),
           rt: Type::Simple("Int".into()),
         },
-        body: (Expr::Lit(Lit::Int(2))),
+        body: (Expr::Lit(LitExpr::Int(2))),
       }),
-      Def::Fun(Fun {
+      Def::Fun(FunDef {
         sig: FunSig {
           name: "h".into(),
           args: Vec::from([
@@ -477,9 +477,9 @@ mod test {
           ]),
           rt: Type::Simple("Int".into()),
         },
-        body: (Expr::Lit(Lit::Int(3))),
+        body: (Expr::Lit(LitExpr::Int(3))),
       }),
-      Def::Fun(Fun {
+      Def::Fun(FunDef {
         sig: FunSig {
           name: "i".into(),
           args: Vec::from([
@@ -498,7 +498,7 @@ mod test {
           ]),
           rt: Type::Simple("Int".into()),
         },
-        body: (Expr::Value(Value { name: "a".into() })),
+        body: (Expr::Value(ValueExpr { name: "a".into() })),
       }),
     ]);
 

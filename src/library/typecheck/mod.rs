@@ -53,7 +53,7 @@ impl ProcessTypecheckerNode for qualified::Def {
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     match self {
-      Def::Fun(f) => Function { f, closure: () }
+      Def::Fun(f) => FunctionExpr { f, closure: () }
         .process(ctx)
         .map(|tv| Def::Fun(tv.v.f)),
       Def::Struct(s) => s.process(ctx).map(Def::Struct),
@@ -65,8 +65,8 @@ impl ProcessTypecheckerNode for qualified::Def {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Function {
-  type R = CheckResult<typed::Function>;
+impl ProcessTypecheckerNode for qualified::FunctionExpr {
+  type R = CheckResult<typed::FunctionExpr>;
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let TypedValue { v: sig, t } = ctx.typecheck_funsig(self.f.sig, false)?;
 
@@ -94,8 +94,8 @@ impl ProcessTypecheckerNode for qualified::Function {
     );
 
     Ok(TypedValue {
-      v: Function {
-        f: Fun { sig, body: body.v },
+      v: FunctionExpr {
+        f: FunDef { sig, body: body.v },
         closure: Vec::new(),
       },
       t,
@@ -103,8 +103,8 @@ impl ProcessTypecheckerNode for qualified::Function {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Struct {
-  type R = Result<typed::Struct>;
+impl ProcessTypecheckerNode for qualified::StructDef {
+  type R = Result<typed::StructDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let name = self.name;
@@ -128,14 +128,14 @@ impl ProcessTypecheckerNode for qualified::Struct {
         .collect(),
     );
 
-    let struct_ = Struct { name, args };
+    let struct_ = StructDef { name, args };
 
     Ok(struct_)
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Val {
-  type R = Result<typed::Val>;
+impl ProcessTypecheckerNode for qualified::ValDef {
+  type R = Result<typed::ValDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let name = self.name;
@@ -152,7 +152,7 @@ impl ProcessTypecheckerNode for qualified::Val {
 
     ctx.values.insert(name.clone(), expr.t.clone());
 
-    Ok(Val {
+    Ok(ValDef {
       name,
       t,
       expr: expr.v,
@@ -168,8 +168,8 @@ impl ProcessTypecheckerNode for qualified::Import {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Class {
-  type R = Result<typed::Class>;
+impl ProcessTypecheckerNode for qualified::ClassDef {
+  type R = Result<typed::ClassDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let name = self.name.clone();
@@ -179,7 +179,7 @@ impl ProcessTypecheckerNode for qualified::Class {
       .map(|m| ctx.typecheck_funsig(m, true).map(|m| m.v))
       .collect::<Result<_, _>>()?;
 
-    let class = Class { name, methods };
+    let class = ClassDef { name, methods };
 
     ctx.classes.insert(class.name.clone(), class.clone());
 
@@ -187,8 +187,8 @@ impl ProcessTypecheckerNode for qualified::Class {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Impl {
-  type R = Result<typed::Impl>;
+impl ProcessTypecheckerNode for qualified::ImplDef {
+  type R = Result<typed::ImplDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let class_name = self.class_name.clone();
@@ -196,10 +196,14 @@ impl ProcessTypecheckerNode for qualified::Impl {
     let t = ctx.get_simple_type(self.t.clone())?;
     ctx.type_impl = Some(t.clone());
 
-    let impls: Vec<typed::Fun> = self
+    let impls: Vec<typed::FunDef> = self
       .impls
       .into_iter()
-      .map(|i| Function { f: i, closure: () }.process(ctx).map(|i| i.v.f))
+      .map(|i| {
+        FunctionExpr { f: i, closure: () }
+          .process(ctx)
+          .map(|i| i.v.f)
+      })
       .collect::<Result<_, _>>()?;
 
     let Ok(class) = ctx.get_class(class_name.as_str()) else {
@@ -224,7 +228,7 @@ impl ProcessTypecheckerNode for qualified::Impl {
     ctx.type_impl = None;
 
     Ok(
-      Impl {
+      ImplDef {
         class_name,
         t,
         impls,
@@ -291,8 +295,8 @@ impl ProcessTypecheckerNode for qualified::Expr {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::BinOp {
-  type R = CheckResult<typed::BinOp>;
+impl ProcessTypecheckerNode for qualified::BinOpExpr {
+  type R = CheckResult<typed::BinOpExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let lh = self.lh.process(ctx)?;
@@ -319,7 +323,7 @@ impl ProcessTypecheckerNode for qualified::BinOp {
         SimpleType::Int | SimpleType::Float,
         op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
       ) => TypedValue::get(
-        BinOp {
+        BinOpExpr {
           lh: lh.v,
           op,
           rh: rh.v,
@@ -330,7 +334,7 @@ impl ProcessTypecheckerNode for qualified::BinOp {
         SimpleType::Int | SimpleType::Float,
         op @ (Op::Lt | Op::Le | Op::Ne | Op::Eq | Op::Ge | Op::Gt),
       ) => TypedValue::get(
-        BinOp {
+        BinOpExpr {
           lh: lh.v,
           op,
           rh: rh.v,
@@ -338,7 +342,7 @@ impl ProcessTypecheckerNode for qualified::BinOp {
         Type::Simple(SimpleType::Bool),
       ),
       (SimpleType::Bool, op @ (Op::And | Op::Or)) => TypedValue::get(
-        BinOp {
+        BinOpExpr {
           lh: lh.v,
           op,
           rh: rh.v,
@@ -355,18 +359,18 @@ impl ProcessTypecheckerNode for qualified::BinOp {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Chain {
-  type R = CheckResult<typed::Chain>;
+impl ProcessTypecheckerNode for qualified::ChainExpr {
+  type R = CheckResult<typed::ChainExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let lh = self.e1.process(ctx)?;
     let rh = self.e2.process(ctx)?;
 
-    TypedValue::get(Chain { e1: lh.v, e2: rh.v }, rh.t)
+    TypedValue::get(ChainExpr { e1: lh.v, e2: rh.v }, rh.t)
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Call {
+impl ProcessTypecheckerNode for qualified::CallExpr {
   type R = CheckResult<typed::Expr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
@@ -406,7 +410,7 @@ impl ProcessTypecheckerNode for qualified::Call {
     if exp_no_of_args == no_of_args {
       // regular function
       TypedValue::get(
-        Expr::Call(Call {
+        Expr::Call(CallExpr {
           name,
           args: arg_values,
         }),
@@ -429,7 +433,7 @@ impl ProcessTypecheckerNode for qualified::Call {
           type_: t,
         })
         .collect();
-      let body = Expr::Call(Call {
+      let body = Expr::Call(CallExpr {
         name,
         args: arg_values
           .into_iter()
@@ -439,7 +443,7 @@ impl ProcessTypecheckerNode for qualified::Call {
               .into_iter()
               .enumerate()
               .map(|(i, _)| {
-                Expr::Value(Value {
+                Expr::Value(ValueExpr {
                   name: i.to_string(),
                 })
               })
@@ -449,8 +453,8 @@ impl ProcessTypecheckerNode for qualified::Call {
       });
 
       TypedValue::get(
-        Expr::Function(Box::new(Function {
-          f: Fun {
+        Expr::Function(Box::new(FunctionExpr {
+          f: FunDef {
             sig: FunSig {
               name: partial_name,
               args,
@@ -471,8 +475,8 @@ impl ProcessTypecheckerNode for qualified::Call {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::If {
-  type R = CheckResult<typed::If>;
+impl ProcessTypecheckerNode for qualified::IfExpr {
+  type R = CheckResult<typed::IfExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let be = self.if_.process(ctx)?;
@@ -489,7 +493,7 @@ impl ProcessTypecheckerNode for qualified::If {
     };
 
     TypedValue::get(
-      If {
+      IfExpr {
         if_: be.v,
         then: e1.v,
         else_: e2.v,
@@ -499,8 +503,8 @@ impl ProcessTypecheckerNode for qualified::If {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Attr {
-  type R = CheckResult<typed::Attr>;
+impl ProcessTypecheckerNode for qualified::AttrExpr {
+  type R = CheckResult<typed::AttrExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let struct_ = match (ctx.get_value(self.name.clone())?, &ctx.type_impl) {
@@ -527,7 +531,7 @@ impl ProcessTypecheckerNode for qualified::Attr {
     };
 
     TypedValue::get(
-      typed::Attr {
+      typed::AttrExpr {
         name: self.name,
         struct_,
         attr: self.attr,
@@ -537,33 +541,33 @@ impl ProcessTypecheckerNode for qualified::Attr {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Lit {
-  type R = CheckResult<typed::Lit>;
+impl ProcessTypecheckerNode for qualified::LitExpr {
+  type R = CheckResult<typed::LitExpr>;
 
   fn process(self, _ctx: &mut Typechecker) -> Self::R {
     let t = match self {
-      Lit::Int(_) => SimpleType::Int,
-      Lit::Bool(_) => SimpleType::Bool,
-      Lit::Float(_) => SimpleType::Float,
-      Lit::String(_) => SimpleType::String,
+      LitExpr::Int(_) => SimpleType::Int,
+      LitExpr::Bool(_) => SimpleType::Bool,
+      LitExpr::Float(_) => SimpleType::Float,
+      LitExpr::String(_) => SimpleType::String,
     };
 
     TypedValue::get(self, Type::Simple(t))
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Value {
-  type R = CheckResult<typed::Value>;
+impl ProcessTypecheckerNode for qualified::ValueExpr {
+  type R = CheckResult<typed::ValueExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let type_ = ctx.get_value(self.name.clone())?;
 
-    TypedValue::get(typed::Value { name: self.name }, type_)
+    TypedValue::get(typed::ValueExpr { name: self.name }, type_)
   }
 }
 
-impl ProcessTypecheckerNode for qualified::Assign {
-  type R = CheckResult<typed::Assign>;
+impl ProcessTypecheckerNode for qualified::AssignExpr {
+  type R = CheckResult<typed::AssignExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let type_ = ctx.get_type(self.type_)?;
@@ -580,7 +584,7 @@ impl ProcessTypecheckerNode for qualified::Assign {
     ctx.closure_manager.push(self.name.clone(), type_.clone());
 
     TypedValue::get(
-      Assign {
+      AssignExpr {
         name: self.name,
         type_: type_.clone(),
         expr: expr.v,
@@ -590,8 +594,8 @@ impl ProcessTypecheckerNode for qualified::Assign {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::New {
-  type R = CheckResult<typed::New>;
+impl ProcessTypecheckerNode for qualified::NewExpr {
+  type R = CheckResult<typed::NewExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let args = self
@@ -602,11 +606,11 @@ impl ProcessTypecheckerNode for qualified::New {
     let struct_args = ctx.get_struct(self.name.clone()).map(|s| s.args)?;
 
     TypedValue::get(
-      New {
+      NewExpr {
         name: self.name.clone(),
         args,
       },
-      Type::Simple(SimpleType::Struct(Struct {
+      Type::Simple(SimpleType::Struct(StructDef {
         name: self.name,
         args: struct_args,
       })),
@@ -614,15 +618,15 @@ impl ProcessTypecheckerNode for qualified::New {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::StringTemplate {
-  type R = CheckResult<typed::StringTemplate>;
+impl ProcessTypecheckerNode for qualified::StringTemplateExpr {
+  type R = CheckResult<typed::StringTemplateExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let mut typed_args = Vec::new();
     let mut types_by_value_map = HashMap::new();
 
     for value in self.args {
-      let TypedValue { v, t } = Value { name: value }.process(ctx)?;
+      let TypedValue { v, t } = ValueExpr { name: value }.process(ctx)?;
       typed_args.push(v.name.clone());
       types_by_value_map.insert(v.name, t);
     }
@@ -643,7 +647,7 @@ impl ProcessTypecheckerNode for qualified::StringTemplate {
       .into_owned();
 
     TypedValue::get(
-      typed::StringTemplate {
+      typed::StringTemplateExpr {
         string: typed_template,
         args: typed_args,
       },
@@ -652,8 +656,8 @@ impl ProcessTypecheckerNode for qualified::StringTemplate {
   }
 }
 
-impl ProcessTypecheckerNode for qualified::MethodCall {
-  type R = CheckResult<typed::MethodCall>;
+impl ProcessTypecheckerNode for qualified::MethodCallExpr {
+  type R = CheckResult<typed::MethodCallExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let this = self.this.process(ctx)?;
@@ -671,7 +675,7 @@ impl ProcessTypecheckerNode for qualified::MethodCall {
     };
 
     TypedValue::get(
-      typed::MethodCall {
+      typed::MethodCallExpr {
         this: this.v,
         typename: t.get_name(),
         methodname,
@@ -686,7 +690,7 @@ pub struct Typechecker {
   values: HashMap<String, typed::Type>,
   functions: HashMap<String, (Vec<typed::Type>, typed::Type)>,
   types: HashMap<String, Vec<(String, typed::Type)>>,
-  classes: HashMap<String, typed::Class>,
+  classes: HashMap<String, typed::ClassDef>,
   methods: HashMap<String, typed::FunSig>,
   closure: Vec<(String, typed::Type)>,
   closure_manager: ClosureManager,
@@ -728,9 +732,9 @@ impl Typechecker {
     expr.process(self).map(|tv| (tv.v, tv.t))
   }
 
-  fn get_struct(&self, name: String) -> Result<typed::Struct> {
+  fn get_struct(&self, name: String) -> Result<typed::StructDef> {
     if let Some(args) = self.types.get(name.as_str()) {
-      return Ok(Struct {
+      return Ok(StructDef {
         name: name.to_string(),
         args: args
           .iter()
@@ -782,7 +786,7 @@ impl Typechecker {
     bail!("Cant find value {}", name)
   }
 
-  fn get_class(&self, name: &str) -> Result<typed::Class> {
+  fn get_class(&self, name: &str) -> Result<typed::ClassDef> {
     if let Some(c) = self.classes.get(name) {
       return Ok(c.clone());
     }
@@ -933,13 +937,13 @@ mod test {
 
   // typecheck_lit
   #[rstest]
-  #[case(Lit::Int(32), SimpleType::Int)]
-  #[case(Lit::Bool(true), SimpleType::Bool)]
-  #[case(Lit::Float("3.2".to_string()), SimpleType::Float)]
-  #[case(Lit::String("foo".to_string()), SimpleType::String)]
+  #[case(LitExpr::Int(32), SimpleType::Int)]
+  #[case(LitExpr::Bool(true), SimpleType::Bool)]
+  #[case(LitExpr::Float("3.2".to_string()), SimpleType::Float)]
+  #[case(LitExpr::String("foo".to_string()), SimpleType::String)]
   fn test_typecheck_lit(
     mut typechecker: Typechecker,
-    #[case] lit: Lit,
+    #[case] lit: LitExpr,
     #[case] type_: SimpleType,
   ) {
     // given
@@ -960,7 +964,7 @@ mod test {
   #[rstest]
   fn test_typecheck_value_ok(mut typechecker: Typechecker) {
     // given
-    let value = Value {
+    let value = ValueExpr {
       name: "foo".to_string(),
     };
     let type_ = Type::Simple(SimpleType::String);
@@ -980,7 +984,7 @@ mod test {
   #[rstest]
   fn test_typecheck_value_error(mut typechecker: Typechecker) {
     // given
-    let name = Value {
+    let name = ValueExpr {
       name: "foo".to_string(),
     };
 
@@ -998,16 +1002,16 @@ mod test {
     // given
     let name = "foo".to_string();
     let type_ = Type::Simple("Int".to_string());
-    let expr = Expr::Lit(Lit::Int(32));
+    let expr = Expr::Lit(LitExpr::Int(32));
     let expected_result = TypedValue {
-      v: Assign {
+      v: AssignExpr {
         name: name.clone(),
         type_: Type::Simple(SimpleType::Int),
-        expr: Expr::Lit(Lit::Int(32)),
+        expr: Expr::Lit(LitExpr::Int(32)),
       },
       t: Type::Simple(SimpleType::Int),
     };
-    let assign = Assign { name, type_, expr };
+    let assign = AssignExpr { name, type_, expr };
 
     // when
     let result = assign.process(&mut typechecker).unwrap();
@@ -1024,8 +1028,8 @@ mod test {
   fn test_typecheck_assign_error(mut typechecker: Typechecker) {
     let name = "foo".to_string();
     let type_ = Type::Simple("Int".to_string());
-    let expr = Expr::Lit(Lit::Bool(false));
-    let assign = Assign { name, type_, expr };
+    let expr = Expr::Lit(LitExpr::Bool(false));
+    let assign = AssignExpr { name, type_, expr };
 
     // when
     let result = assign.process(&mut typechecker);
@@ -1040,16 +1044,16 @@ mod test {
   #[rstest]
   fn test_typecheck_chain_ok(mut typechecker: Typechecker) {
     // given
-    let e1 = Expr::Lit(Lit::Int(32));
-    let e2 = Expr::Lit(Lit::Float("32.0".to_string()));
+    let e1 = Expr::Lit(LitExpr::Int(32));
+    let e2 = Expr::Lit(LitExpr::Float("32.0".to_string()));
     let expected_result = TypedValue {
-      v: Chain {
-        e1: Expr::Lit(Lit::Int(32)),
-        e2: Expr::Lit(Lit::Float("32.0".to_string())),
+      v: ChainExpr {
+        e1: Expr::Lit(LitExpr::Int(32)),
+        e2: Expr::Lit(LitExpr::Float("32.0".to_string())),
       },
       t: Type::Simple(SimpleType::Float),
     };
-    let chain = Chain { e1, e2 };
+    let chain = ChainExpr { e1, e2 };
 
     // when
     let result = chain.process(&mut typechecker).unwrap();
@@ -1065,9 +1069,9 @@ mod test {
     // given
     let name = "foo".to_string();
     let args = Vec::from([
-      Expr::Lit(Lit::Int(1)),
-      Expr::Lit(Lit::Float("1.2".to_string())),
-      Expr::Lit(Lit::Bool(true)),
+      Expr::Lit(LitExpr::Int(1)),
+      Expr::Lit(LitExpr::Float("1.2".to_string())),
+      Expr::Lit(LitExpr::Bool(true)),
     ]);
     typechecker.functions.insert(
       name.clone(),
@@ -1081,17 +1085,17 @@ mod test {
       ),
     );
     let expected_result = TypedValue {
-      v: Expr::Call(Call {
+      v: Expr::Call(CallExpr {
         name: name.clone(),
         args: Vec::from([
-          Expr::Lit(Lit::Int(1)),
-          Expr::Lit(Lit::Float("1.2".to_string())),
-          Expr::Lit(Lit::Bool(true)),
+          Expr::Lit(LitExpr::Int(1)),
+          Expr::Lit(LitExpr::Float("1.2".to_string())),
+          Expr::Lit(LitExpr::Bool(true)),
         ]),
       }),
       t: Type::Simple(SimpleType::String),
     };
-    let call = Call { name, args };
+    let call = CallExpr { name, args };
 
     // when
     let result = call.process(&mut typechecker).unwrap();
@@ -1105,7 +1109,7 @@ mod test {
     // given
     let name = "foo".to_string();
     let args = Vec::new();
-    let call = Call { name, args };
+    let call = CallExpr { name, args };
 
     // when
     let result = call.process(&mut typechecker);
@@ -1117,23 +1121,23 @@ mod test {
   #[rstest]
   #[case::bad_int(
         Vec::from([
-            Expr::Lit(Lit::String("bad".to_string())),
-            Expr::Lit(Lit::Float("1.2".to_string())),
-            Expr::Lit(Lit::Bool(true)),
+            Expr::Lit(LitExpr::String("bad".to_string())),
+            Expr::Lit(LitExpr::Float("1.2".to_string())),
+            Expr::Lit(LitExpr::Bool(true)),
         ])
     )]
   #[case::bad_float(
         Vec::from([
-            Expr::Lit(Lit::Int(1)),
-            Expr::Lit(Lit::String("bad".to_string())),
-            Expr::Lit(Lit::Bool(true)),
+            Expr::Lit(LitExpr::Int(1)),
+            Expr::Lit(LitExpr::String("bad".to_string())),
+            Expr::Lit(LitExpr::Bool(true)),
         ])
     )]
   #[case::bad_bool(
         Vec::from([
-            Expr::Lit(Lit::Int(1)),
-            Expr::Lit(Lit::Float("1.2".to_string())),
-            Expr::Lit(Lit::String("bad".to_string())),
+            Expr::Lit(LitExpr::Int(1)),
+            Expr::Lit(LitExpr::Float("1.2".to_string())),
+            Expr::Lit(LitExpr::String("bad".to_string())),
         ])
     )]
   fn test_typecheck_call_error_invalid_arg_types(
@@ -1153,7 +1157,7 @@ mod test {
         Type::Simple(SimpleType::String),
       ),
     );
-    let call = Call { name, args };
+    let call = CallExpr { name, args };
 
     // when
     let result = call.process(&mut typechecker);
@@ -1167,18 +1171,18 @@ mod test {
   #[rstest]
   fn test_typecheck_if_ok(mut typechecker: Typechecker) {
     // given
-    let if_ = Expr::Lit(Lit::Bool(true));
-    let then = Expr::Lit(Lit::Int(1));
-    let else_ = Expr::Lit(Lit::Int(2));
+    let if_ = Expr::Lit(LitExpr::Bool(true));
+    let then = Expr::Lit(LitExpr::Int(1));
+    let else_ = Expr::Lit(LitExpr::Int(2));
     let expected_result = TypedValue {
-      v: If {
-        if_: Expr::Lit(Lit::Bool(true)),
-        then: Expr::Lit(Lit::Int(1)),
-        else_: Expr::Lit(Lit::Int(2)),
+      v: IfExpr {
+        if_: Expr::Lit(LitExpr::Bool(true)),
+        then: Expr::Lit(LitExpr::Int(1)),
+        else_: Expr::Lit(LitExpr::Int(2)),
       },
       t: Type::Simple(SimpleType::Int),
     };
-    let if_ = If { if_, then, else_ };
+    let if_ = IfExpr { if_, then, else_ };
 
     // when
     let result = if_.process(&mut typechecker).unwrap();
@@ -1188,23 +1192,23 @@ mod test {
   }
 
   #[rstest]
-  #[case::invalid_if(Lit::Int(3), Lit::Int(1), Lit::Int(2))]
+  #[case::invalid_if(LitExpr::Int(3), LitExpr::Int(1), LitExpr::Int(2))]
   #[case::unequal_branches(
-        Lit::Bool(false),
-        Lit::Int(1),
-        Lit::Float("3.4".to_string()),
+        LitExpr::Bool(false),
+        LitExpr::Int(1),
+        LitExpr::Float("3.4".to_string()),
     )]
   fn test_typecheck_if_error(
     mut typechecker: Typechecker,
-    #[case] be: Lit,
-    #[case] e1: Lit,
-    #[case] e2: Lit,
+    #[case] be: LitExpr,
+    #[case] e1: LitExpr,
+    #[case] e2: LitExpr,
   ) {
     // given
     let if_ = Expr::Lit(be);
     let then = Expr::Lit(e1);
     let else_ = Expr::Lit(e2);
-    let if_ = If { if_, then, else_ };
+    let if_ = IfExpr { if_, then, else_ };
 
     // when
     let result = if_.process(&mut typechecker);
@@ -1261,7 +1265,7 @@ mod test {
         .map(|arg| (arg.name, arg.type_))
         .collect(),
     );
-    let expected_result = Type::Simple(SimpleType::Struct(Struct {
+    let expected_result = Type::Simple(SimpleType::Struct(StructDef {
       name: s.clone(),
       args,
     }));
