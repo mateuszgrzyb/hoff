@@ -23,7 +23,10 @@ impl GlobalDeclTypechecker {
     }
   }
 
-  pub fn check(&mut self, untyped_decls: untyped::Decls) -> Result<typed::Decls> {
+  pub fn check(
+    &mut self,
+    untyped_decls: untyped::Decls,
+  ) -> Result<typed::Decls> {
     self.populate_types();
 
     let mut structs = Vec::new();
@@ -68,7 +71,10 @@ impl GlobalDeclTypechecker {
     self.types.insert("This".to_string(), SimpleType::This);
   }
 
-  fn check_funargs(&self, args: Vec<untyped::FunArg>) -> Result<Vec<typed::FunArg>> {
+  fn check_funargs(
+    &self,
+    args: Vec<untyped::FunArg>,
+  ) -> Result<Vec<typed::FunArg>> {
     args
       .into_iter()
       .map(|arg| {
@@ -80,7 +86,10 @@ impl GlobalDeclTypechecker {
       .collect::<Result<_>>()
   }
 
-  fn check_structargs(&self, args: Vec<untyped::StructArg>) -> Result<Vec<typed::StructArg>> {
+  fn check_structargs(
+    &self,
+    args: Vec<untyped::StructArg>,
+  ) -> Result<Vec<typed::StructArg>> {
     args
       .into_iter()
       .map(|arg| {
@@ -92,7 +101,10 @@ impl GlobalDeclTypechecker {
       .collect::<Result<_>>()
   }
 
-  fn check_structs(&mut self, ss: Vec<untyped::Struct>) -> Result<Vec<typed::Struct>> {
+  fn check_structs(
+    &mut self,
+    ss: Vec<untyped::Struct>,
+  ) -> Result<Vec<typed::Struct>> {
     let mut type_sorter = Sorter::create(ss);
     let ss = type_sorter.sort()?;
 
@@ -124,7 +136,10 @@ impl GlobalDeclTypechecker {
     Ok(typed::FunSig { name, args, rt })
   }
 
-  fn check_vals(&self, vds: Vec<untyped::ValDecl>) -> Result<Vec<typed::ValDecl>> {
+  fn check_vals(
+    &self,
+    vds: Vec<untyped::ValDecl>,
+  ) -> Result<Vec<typed::ValDecl>> {
     let mut name_sorter = Sorter::create(vds);
     let vds = name_sorter.sort()?;
 
@@ -175,7 +190,9 @@ impl GlobalDeclTypechecker {
 
   fn get_type(&self, t: untyped::Type) -> Result<typed::Type> {
     match t {
-      untyped::Type::Simple(s) => Ok(typed::Type::Simple(self.get_simple_type(s)?)),
+      untyped::Type::Simple(s) => {
+        Ok(typed::Type::Simple(self.get_simple_type(s)?))
+      }
       untyped::Type::Function(ts) => {
         let ts = ts
           .into_iter()

@@ -62,11 +62,16 @@ pub struct InputFile {
 }
 
 impl InputFile {
-  pub fn read_files(paths: Vec<String>) -> impl ParallelIterator<Item = Result<Self>> + Clone {
-    Self::_read_files(paths.into_par_iter().map(Ok)).map(|i| i.map_err(|e| anyhow!(e)))
+  pub fn read_files(
+    paths: Vec<String>,
+  ) -> impl ParallelIterator<Item = Result<Self>> + Clone {
+    Self::_read_files(paths.into_par_iter().map(Ok))
+      .map(|i| i.map_err(|e| anyhow!(e)))
   }
 
-  fn _read_files<PS>(paths: PS) -> impl ParallelIterator<Item = Result<Self, String>> + Clone
+  fn _read_files<PS>(
+    paths: PS,
+  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone
   where
     PS: ParallelIterator<Item = Result<String, String>> + Clone,
   {
@@ -76,20 +81,23 @@ impl InputFile {
   fn _read_file(
     path: Result<String, String>,
   ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
-    let file: Result<Self, String> = path.and_then(|path| -> Result<Self, String> {
-      match read_to_string(&path) {
-        Err(e) => Err(e.to_string()),
-        Ok(contents) => Ok(InputFile {
-          name: path,
-          contents,
-        }),
-      }
-    });
+    let file: Result<Self, String> =
+      path.and_then(|path| -> Result<Self, String> {
+        match read_to_string(&path) {
+          Err(e) => Err(e.to_string()),
+          Ok(contents) => Ok(InputFile {
+            name: path,
+            contents,
+          }),
+        }
+      });
 
     once(file)
   }
 
-  fn _read_dir(path: String) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
+  fn _read_dir(
+    path: String,
+  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
     let sub_paths = read_dir(path);
 
     let sub_paths = match sub_paths {

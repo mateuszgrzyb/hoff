@@ -29,7 +29,10 @@ impl ImportQualifier {
     })
   }
 
-  pub fn qualify_defs(&self, defs: Vec<untyped::Def>) -> Result<Vec<qualified::Def>> {
+  pub fn qualify_defs(
+    &self,
+    defs: Vec<untyped::Def>,
+  ) -> Result<Vec<qualified::Def>> {
     defs
       .into_par_iter()
       .map(|d| self.qualify_def(d))
@@ -38,7 +41,9 @@ impl ImportQualifier {
 
   fn qualify_def(&self, d: untyped::Def) -> Result<qualified::Def> {
     match d {
-      untyped::Def::Import(i) => self.qualify_import(i).map(qualified::Def::Import),
+      untyped::Def::Import(i) => {
+        self.qualify_import(i).map(qualified::Def::Import)
+      }
       untyped::Def::Fun(f) => Ok(qualified::Def::Fun(f)),
       untyped::Def::Struct(s) => Ok(qualified::Def::Struct(s)),
       untyped::Def::Val(v) => Ok(qualified::Def::Val(v)),

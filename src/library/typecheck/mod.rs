@@ -209,7 +209,8 @@ impl ProcessTypecheckerNode for qualified::Impl {
     let mut class_sigs = class.methods;
     class_sigs.sort_by_key(|m| m.name.clone());
 
-    let mut impl_sigs = impls.clone().into_iter().map(|i| i.sig).collect::<Vec<_>>();
+    let mut impl_sigs =
+      impls.clone().into_iter().map(|i| i.sig).collect::<Vec<_>>();
     impl_sigs.sort_by_key(|m| m.name.clone());
 
     if class_sigs != impl_sigs {
@@ -304,7 +305,8 @@ impl ProcessTypecheckerNode for qualified::BinOp {
       rh.t,
     );
 
-    let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
+    let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone())
+    else {
       bail!(
         "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
         lh.t,
@@ -313,16 +315,17 @@ impl ProcessTypecheckerNode for qualified::BinOp {
     };
 
     match (lht, self.op) {
-      (SimpleType::Int | SimpleType::Float, op @ (Op::Add | Op::Sub | Op::Mul | Op::Div)) => {
-        TypedValue::get(
-          BinOp {
-            lh: lh.v,
-            op,
-            rh: rh.v,
-          },
-          Type::Simple(rht),
-        )
-      }
+      (
+        SimpleType::Int | SimpleType::Float,
+        op @ (Op::Add | Op::Sub | Op::Mul | Op::Div),
+      ) => TypedValue::get(
+        BinOp {
+          lh: lh.v,
+          op,
+          rh: rh.v,
+        },
+        Type::Simple(rht),
+      ),
       (
         SimpleType::Int | SimpleType::Float,
         op @ (Op::Lt | Op::Le | Op::Ne | Op::Eq | Op::Ge | Op::Gt),
@@ -389,7 +392,9 @@ impl ProcessTypecheckerNode for qualified::Call {
       )
     }
 
-    for (exp_arg_type, arg_type) in exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types) {
+    for (exp_arg_type, arg_type) in
+      exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types)
+    {
       ensure!(
         *exp_arg_type == arg_type,
         "Invalid argument type: {:?} != {:?}",
@@ -500,7 +505,9 @@ impl ProcessTypecheckerNode for qualified::Attr {
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     let struct_ = match (ctx.get_value(self.name.clone())?, &ctx.type_impl) {
       (Type::Simple(SimpleType::Struct(struct_)), _) => struct_,
-      (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => struct_.clone(),
+      (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => {
+        struct_.clone()
+      }
       _ => {
         bail!("Struct `{}` does not exist.", self.name);
       }
@@ -714,7 +721,10 @@ impl Typechecker {
     Self::create(Mod::default())
   }
 
-  pub fn get_type_of_expr(&mut self, expr: qualified::Expr) -> Result<(typed::Expr, typed::Type)> {
+  pub fn get_type_of_expr(
+    &mut self,
+    expr: qualified::Expr,
+  ) -> Result<(typed::Expr, typed::Type)> {
     expr.process(self).map(|tv| (tv.v, tv.t))
   }
 
@@ -730,19 +740,26 @@ impl Typechecker {
       });
     }
 
-    if let Some(Decl::Struct(s)) = self.module.imports.iter().find(|s| s.get_name() == &name) {
+    if let Some(Decl::Struct(s)) =
+      self.module.imports.iter().find(|s| s.get_name() == &name)
+    {
       return Ok(s.clone());
     }
 
     bail!("Cant find struct {}", name)
   }
 
-  fn get_function(&self, name: String) -> Result<(Vec<typed::Type>, typed::Type)> {
+  fn get_function(
+    &self,
+    name: String,
+  ) -> Result<(Vec<typed::Type>, typed::Type)> {
     if let Some(f) = self.functions.get(name.as_str()) {
       return Ok(f.clone());
     }
 
-    if let Some(Decl::Fun(f)) = self.module.imports.iter().find(|vd| vd.get_name() == &name) {
+    if let Some(Decl::Fun(f)) =
+      self.module.imports.iter().find(|vd| vd.get_name() == &name)
+    {
       let arg_types = f.args.clone().into_iter().map(|a| a.type_).collect();
       let rt = f.rt.clone();
       return Ok((arg_types, rt));
@@ -756,7 +773,9 @@ impl Typechecker {
       return Ok(ts.clone());
     }
 
-    if let Some(Decl::Val(ts)) = self.module.imports.iter().find(|i| i.get_name() == &name) {
+    if let Some(Decl::Val(ts)) =
+      self.module.imports.iter().find(|i| i.get_name() == &name)
+    {
       return Ok(ts.t.clone());
     }
 
@@ -918,7 +937,11 @@ mod test {
   #[case(Lit::Bool(true), SimpleType::Bool)]
   #[case(Lit::Float("3.2".to_string()), SimpleType::Float)]
   #[case(Lit::String("foo".to_string()), SimpleType::String)]
-  fn test_typecheck_lit(mut typechecker: Typechecker, #[case] lit: Lit, #[case] type_: SimpleType) {
+  fn test_typecheck_lit(
+    mut typechecker: Typechecker,
+    #[case] lit: Lit,
+    #[case] type_: SimpleType,
+  ) {
     // given
     let expected_result = TypedValue {
       v: lit.clone(),
@@ -1197,7 +1220,11 @@ mod test {
   #[case("Bool", SimpleType::Bool)]
   #[case("Float", SimpleType::Float)]
   #[case("String", SimpleType::String)]
-  fn test_get_type_ok_simple(typechecker: Typechecker, #[case] s: &str, #[case] t: SimpleType) {
+  fn test_get_type_ok_simple(
+    typechecker: Typechecker,
+    #[case] s: &str,
+    #[case] t: SimpleType,
+  ) {
     // given
     let s = Type::Simple(s.to_string());
 

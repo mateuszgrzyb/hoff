@@ -114,11 +114,12 @@ fn test_compile(mut cli: Command, #[case] dir: &str) {
   let diff = TextDiff::from_lines(&stdout, &expected_output);
 
   for change in diff.iter_all_changes() {
-    let (sign, colorizer): (&str, fn(String) -> ColoredString) = match change.tag() {
-      ChangeTag::Delete => ("-", bold_red),
-      ChangeTag::Insert => ("+", bold_green),
-      ChangeTag::Equal => (" ", black),
-    };
+    let (sign, colorizer): (&str, fn(String) -> ColoredString) =
+      match change.tag() {
+        ChangeTag::Delete => ("-", bold_red),
+        ChangeTag::Insert => ("+", bold_green),
+        ChangeTag::Equal => (" ", black),
+      };
     let diff_str = colorizer(format!("{sign} {change}"));
 
     print!("{diff_str}");

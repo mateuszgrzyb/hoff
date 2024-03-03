@@ -43,7 +43,10 @@ mod test {
   #[case(10, OptimizationLevel::Default)]
   #[case(11, OptimizationLevel::Default)]
   #[case(12, OptimizationLevel::Default)]
-  fn test_get_opt_level(#[case] int_opt_level: u8, #[case] exp_opt_level: OptimizationLevel) {
+  fn test_get_opt_level(
+    #[case] int_opt_level: u8,
+    #[case] exp_opt_level: OptimizationLevel,
+  ) {
     // when
     let opt_level = get_opt_level(int_opt_level);
 

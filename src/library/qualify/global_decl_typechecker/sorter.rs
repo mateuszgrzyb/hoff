@@ -17,7 +17,10 @@ pub struct MarkedNode<T> {
 }
 
 pub trait Sortable<S> {
-  fn get_inner(&self, mark: HashMap<String, MarkedNode<S>>) -> Vec<MarkedNode<S>>;
+  fn get_inner(
+    &self,
+    mark: HashMap<String, MarkedNode<S>>,
+  ) -> Vec<MarkedNode<S>>;
 }
 
 impl Sortable<untyped::Struct> for untyped::Struct {

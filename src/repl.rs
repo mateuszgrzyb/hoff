@@ -6,7 +6,9 @@ use std::{
 use anyhow::{bail, Result};
 use inkwell::context::Context;
 
-use crate::library::{ast::typed::Decls, backend::Interpreter, cli::Args, parser::parse_repl};
+use crate::library::{
+  ast::typed::Decls, backend::Interpreter, cli::Args, parser::parse_repl,
+};
 
 pub struct REPL {
   args: Args,
@@ -27,15 +29,22 @@ impl REPL {
   }
 
   pub fn run_loop(&self) -> ! {
-    let mut interpreter =
-      Interpreter::create(self.global_decls.clone(), &self.context, self.args.o);
+    let mut interpreter = Interpreter::create(
+      self.global_decls.clone(),
+      &self.context,
+      self.args.o,
+    );
 
     loop {
-      let Ok(input) = Self::read_input().map_err(|err| println!("Input error: {}", err)) else {
+      let Ok(input) =
+        Self::read_input().map_err(|err| println!("Input error: {}", err))
+      else {
         continue;
       };
 
-      let Ok(expr) = parse_repl(&input).map_err(|err| println!("Parse error: {}", err)) else {
+      let Ok(expr) =
+        parse_repl(&input).map_err(|err| println!("Parse error: {}", err))
+      else {
         continue;
       };
 

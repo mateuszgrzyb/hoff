@@ -69,11 +69,16 @@ impl Compile {
     Ok(())
   }
 
-  fn read_files(&self) -> impl ParallelIterator<Item = Result<InputFile>> + Clone {
+  fn read_files(
+    &self,
+  ) -> impl ParallelIterator<Item = Result<InputFile>> + Clone {
     InputFile::read_files(self.args.paths.clone())
   }
 
-  fn parse_files<FS>(&self, files: FS) -> impl ParallelIterator<Item = Result<untyped::Mod>> + Clone
+  fn parse_files<FS>(
+    &self,
+    files: FS,
+  ) -> impl ParallelIterator<Item = Result<untyped::Mod>> + Clone
   where
     FS: ParallelIterator<Item = Result<InputFile>> + Clone,
   {
@@ -90,14 +95,18 @@ impl Compile {
     })
   }
 
-  fn qualify_modules<MS>(&self, ms: MS) -> impl ParallelIterator<Item = Result<qualified::Mod>>
+  fn qualify_modules<MS>(
+    &self,
+    ms: MS,
+  ) -> impl ParallelIterator<Item = Result<qualified::Mod>>
   where
     MS: ParallelIterator<Item = Result<untyped::Mod>> + Clone + 'static,
   {
     let global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
 
-    let untyped_global_decls = global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
+    let untyped_global_decls =
+      global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
 
     let typed_global_decls = Arc::new(
       untyped_global_decls
@@ -117,21 +126,28 @@ impl Compile {
     })
   }
 
-  fn typecheck_modules<QMS>(&self, qms: QMS) -> impl ParallelIterator<Item = Result<typed::Mod>>
+  fn typecheck_modules<QMS>(
+    &self,
+    qms: QMS,
+  ) -> impl ParallelIterator<Item = Result<typed::Mod>>
   where
     QMS: ParallelIterator<Item = Result<qualified::Mod>>,
   {
     qms.map(|module| Typechecker::create(module?).check())
   }
 
-  fn compile_modules<TMS>(&self, tms: TMS) -> impl Iterator<Item = Result<Codegen>>
+  fn compile_modules<TMS>(
+    &self,
+    tms: TMS,
+  ) -> impl Iterator<Item = Result<Codegen>>
   where
     TMS: ParallelIterator<Item = Result<typed::Mod>>,
   {
     let evaluated_tms = tms.collect::<Vec<_>>();
 
     evaluated_tms.into_iter().map(|module| {
-      let mut codegen = Codegen::create(&self.context, true, self.args.sort_decls);
+      let mut codegen =
+        Codegen::create(&self.context, true, self.args.sort_decls);
 
       module?.process(&mut codegen);
       Ok(codegen)

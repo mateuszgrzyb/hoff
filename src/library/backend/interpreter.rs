@@ -20,7 +20,11 @@ pub struct Interpreter<'ctx> {
 }
 
 impl<'ctx> Interpreter<'ctx> {
-  pub fn create(global_decls: Arc<typed::Decls>, context: &'ctx Context, opt_level: u8) -> Self {
+  pub fn create(
+    global_decls: Arc<typed::Decls>,
+    context: &'ctx Context,
+    opt_level: u8,
+  ) -> Self {
     let opt_level = get_opt_level(opt_level);
     let codegen = Codegen::create(context, true, false);
     let execution_engine = codegen
@@ -84,7 +88,11 @@ impl<'ctx> Interpreter<'ctx> {
     Ok(sig)
   }
 
-  fn create_main(&mut self, body: typed::Expr, rt: typed::Type) -> Result<typed::Mod> {
+  fn create_main(
+    &mut self,
+    body: typed::Expr,
+    rt: typed::Type,
+  ) -> Result<typed::Mod> {
     let main = typed::Fun {
       sig: typed::FunSig {
         name: "main".to_string(),

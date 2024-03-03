@@ -1,6 +1,8 @@
 use macros::define_map;
 
-use crate::library::ast::typed::{Fun, FunSig, Impl, ImplDecl, SimpleType, Type};
+use crate::library::ast::typed::{
+  Fun, FunSig, Impl, ImplDecl, SimpleType, Type,
+};
 
 trait InstantiateSubject {
   fn get_type(&self) -> SimpleType;
