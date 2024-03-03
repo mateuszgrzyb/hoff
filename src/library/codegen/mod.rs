@@ -234,7 +234,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
           Op::Or => ctx.builder.build_or(lh, rh, "and"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       (BasicTypeEnum::IntType(_), op) => {
         let lh = lh.into_int_value();
@@ -252,7 +252,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
           Op::Gt => b.build_int_compare(SGT, lh, rh, "igt"),
           Op::And | Op::Or => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       (BasicTypeEnum::FloatType(_), op @ (Op::Add | Op::Sub | Op::Mul | Op::Div)) => {
         let lh = lh.into_float_value();
@@ -264,7 +264,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
           Op::Div => b.build_float_div(lh, rh, "fdiv"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
 
       (BasicTypeEnum::FloatType(_), op) => {
@@ -279,7 +279,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for BinOp {
           Op::Gt => b.build_float_compare(OGT, lh, rh, "fgt"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       _ => panic!("Invalid state"),
     }
@@ -301,6 +301,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Lit {
       Lit::String(s) => ctx
         .builder
         .build_global_string_ptr(&s, "")
+        .unwrap()
         .as_basic_value_enum(),
     }
   }
@@ -324,6 +325,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Value {
       return ctx
         .builder
         .build_call(*f, &[], "call")
+        .unwrap()
         .try_as_basic_value()
         .left()
         .unwrap();
@@ -398,6 +400,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Call {
     ctx
       .builder
       .build_call(f, &args[..], "call")
+      .unwrap()
       .try_as_basic_value()
       .left()
       .unwrap()
@@ -468,6 +471,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for If {
     ctx
       .builder
       .build_select(if_.into_int_value(), then, else_, "select")
+      .unwrap()
   }
 }
 
@@ -493,7 +497,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for Attr {
 
     match arg.type_ {
       Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => attr_ptr.as_basic_value_enum(),
-      _ => ctx.builder.build_load(attr_ptr, "load"),
+      _ => ctx.builder.build_load(attr_ptr, "load").unwrap(),
     }
   }
 }
@@ -516,7 +520,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for New {
 
     let struct_ptr = b.build_malloc(struct_type, "malloc").unwrap();
 
-    b.build_store(struct_ptr, struct_value);
+    b.build_store(struct_ptr, struct_value).unwrap();
 
     struct_ptr.as_basic_value_enum()
   }
@@ -536,10 +540,12 @@ impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplate {
 
     let template_value = b
       .build_global_string_ptr(&self.string, "str_tmpl")
+      .unwrap()
       .as_basic_value_enum();
 
     let template_value_result = b
       .build_global_string_ptr("", "str_tmpl_rstl")
+      .unwrap()
       .as_basic_value_enum();
 
     let mut sprintf_args = Vec::from([template_value_result.into(), template_value.into()]);
@@ -548,6 +554,7 @@ impl<'ctx> ProcessCodegenNode<'ctx> for StringTemplate {
     let sprintf = ctx.functions.get("sprintf").unwrap();
 
     b.build_call(*sprintf, &sprintf_args[..], "run_str_tmpl")
+      .unwrap()
       .try_as_basic_value()
       .left()
       .unwrap();
@@ -752,7 +759,7 @@ impl<'ctx> Codegen<'ctx> {
     // fix builder position
 
     self.builder.position_at_end(basic_block);
-    self.builder.build_return(Some(&value));
+    self.builder.build_return(Some(&value)).unwrap();
     if let Some(pbb) = parent_basic_block {
       self.builder.position_at_end(pbb)
     };

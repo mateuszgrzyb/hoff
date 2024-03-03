@@ -31,17 +31,20 @@ impl REPL {
       Interpreter::create(self.global_decls.clone(), &self.context, self.args.o);
 
     loop {
-      let Ok(input) = Self::read_input()
-        .map_err(|err| println!("Input error: {}", err))
-        else { continue };
+      let Ok(input) = Self::read_input().map_err(|err| println!("Input error: {}", err)) else {
+        continue;
+      };
 
-      let Ok(expr) = parse_repl(&input)
-        .map_err(|err| println!("Parse error: {}", err))
-        else { continue };
+      let Ok(expr) = parse_repl(&input).map_err(|err| println!("Parse error: {}", err)) else {
+        continue;
+      };
 
-      let Ok(result) = interpreter.eval(expr)
+      let Ok(result) = interpreter
+        .eval(expr)
         .map_err(|err| println!("Eval error: {}", err))
-        else { continue };
+      else {
+        continue;
+      };
 
       println!("{}", result)
     }

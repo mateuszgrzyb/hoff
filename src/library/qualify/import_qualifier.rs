@@ -50,7 +50,12 @@ impl ImportQualifier {
   fn qualify_import(&self, i: untyped::Import) -> Result<qualified::Import> {
     let (_, name) = i;
 
-    let Some(d) = self.global_decls.iter().find(|d| d.get_name() == &name).cloned() else {
+    let Some(d) = self
+      .global_decls
+      .iter()
+      .find(|d| d.get_name() == &name)
+      .cloned()
+    else {
       bail!("{} cannot be imported", name);
     };
 

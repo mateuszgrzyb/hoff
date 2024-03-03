@@ -506,7 +506,12 @@ impl ProcessTypecheckerNode for qualified::Attr {
       }
     };
 
-    let Some(StructArg { type_, .. }) = struct_.clone().args.into_iter().find(|arg| arg.name == self.attr) else {
+    let Some(StructArg { type_, .. }) = struct_
+      .clone()
+      .args
+      .into_iter()
+      .find(|arg| arg.name == self.attr)
+    else {
       bail!(
         "Struct `{}` does not have attribute `{}`.",
         self.name,
@@ -655,10 +660,7 @@ impl ProcessTypecheckerNode for qualified::MethodCall {
     let fs = ctx.get_impl_method(this.clone(), methodname.clone())?;
 
     let Type::Simple(t) = this.t else {
-      bail!(
-        "Only simple types can have methods: `{:?}`",
-        this.t,
-      );
+      bail!("Only simple types can have methods: `{:?}`", this.t,);
     };
 
     TypedValue::get(

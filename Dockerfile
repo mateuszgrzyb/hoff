@@ -3,9 +3,9 @@
 ##############
 # base image #
 ##############
-FROM rust:1.70.0 AS chef
+FROM rust:1.75.0-bullseye AS chef
 
-RUN cargo install cargo-chef && \
+RUN cargo install --locked --version 0.1.65 cargo-chef && \
     rustup component add clippy && \
     rustup component add rustfmt
 
@@ -19,7 +19,9 @@ RUN <<EOF
         gnupg
     rm -rf /var/lib/apt/lists/*
     apt-get clean
+EOF
 
+RUN <<EOF
     wget https://apt.llvm.org/llvm.sh
     chmod +x llvm.sh
     ./llvm.sh 12
