@@ -532,7 +532,8 @@ impl TypeChecker {
       rh.t,
     );
 
-    let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone()) else {
+    let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone())
+    else {
       bail!(
         "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
         lh.t,
@@ -778,7 +779,12 @@ impl TypeChecker {
       }
     };
 
-    let Some(StructArg { type_, .. }) = struct_.clone().args.into_iter().find(|arg| arg.name == attr.attr) else {
+    let Some(StructArg { type_, .. }) = struct_
+      .clone()
+      .args
+      .into_iter()
+      .find(|arg| arg.name == attr.attr)
+    else {
       bail!(
         "Struct `{}` does not have attribute `{}`.",
         attr.name,
@@ -868,10 +874,7 @@ impl TypeChecker {
     let fs = self.get_impl_method(this.clone(), methodname.clone())?;
 
     let Type::Simple(t) = this.t else {
-      bail!(
-        "Only simple types can have methods: `{:?}`",
-        this.t,
-      );
+      bail!("Only simple types can have methods: `{:?}`", this.t,);
     };
 
     TypedValue::get(

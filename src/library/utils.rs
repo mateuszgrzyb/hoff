@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::library::ast::{
@@ -6,10 +6,8 @@ use crate::library::ast::{
   SimpleType,
 };
 
-lazy_static! {
-  pub static ref STRING_TEMPLATE_RE: Regex =
-    Regex::new(r"\{\{|\}\}|\{([^}]+)\}").unwrap();
-}
+pub static STRING_TEMPLATE_RE: Lazy<Regex> =
+  Lazy::new(|| Regex::new(r"\{\{|\}\}|\{([^}]+)\}").unwrap());
 
 fn _format_method_name(type_name: &str, method_name: &str) -> String {
   format!("{}$(method)${}", type_name, method_name)

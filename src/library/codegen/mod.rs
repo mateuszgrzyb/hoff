@@ -305,7 +305,7 @@ impl<'ctx> CodeGen<'ctx> {
     // fix builder position
 
     self.builder.position_at_end(basic_block);
-    self.builder.build_return(Some(&value));
+    self.builder.build_return(Some(&value)).unwrap();
     if let Some(pbb) = parent_basic_block {
       self.builder.position_at_end(pbb)
     };
@@ -402,7 +402,7 @@ impl<'ctx> CodeGen<'ctx> {
           Op::Or => self.builder.build_or(lh, rh, "and"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       (BasicTypeEnum::IntType(_), op) => {
         let lh = lh.into_int_value();
@@ -420,7 +420,7 @@ impl<'ctx> CodeGen<'ctx> {
           Op::Gt => self.builder.build_int_compare(SGT, lh, rh, "igt"),
           Op::And | Op::Or => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       (
         BasicTypeEnum::FloatType(_),
@@ -435,7 +435,7 @@ impl<'ctx> CodeGen<'ctx> {
           Op::Div => self.builder.build_float_div(lh, rh, "fdiv"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
 
       (BasicTypeEnum::FloatType(_), op) => {
@@ -450,7 +450,7 @@ impl<'ctx> CodeGen<'ctx> {
           Op::Gt => self.builder.build_float_compare(OGT, lh, rh, "fgt"),
           _ => panic!("Invalid state"),
         };
-        result.as_basic_value_enum()
+        result.unwrap().as_basic_value_enum()
       }
       _ => panic!("Invalid state"),
     }
@@ -476,6 +476,7 @@ impl<'ctx> CodeGen<'ctx> {
       Lit::String(s) => self
         .builder
         .build_global_string_ptr(&s, "")
+        .unwrap()
         .as_basic_value_enum(),
     }
   }
@@ -493,6 +494,7 @@ impl<'ctx> CodeGen<'ctx> {
       return self
         .builder
         .build_call(*f, &[], "call")
+        .unwrap()
         .try_as_basic_value()
         .left()
         .unwrap();
@@ -555,6 +557,7 @@ impl<'ctx> CodeGen<'ctx> {
     self
       .builder
       .build_call(f, &args[..], "call")
+      .unwrap()
       .try_as_basic_value()
       .left()
       .unwrap()
@@ -621,6 +624,7 @@ impl<'ctx> CodeGen<'ctx> {
     self
       .builder
       .build_select(be.into_int_value(), e1, e2, "select")
+      .unwrap()
   }
 
   fn compile_attr(&self, attr: Attr) -> V<'ctx> {
@@ -642,7 +646,7 @@ impl<'ctx> CodeGen<'ctx> {
       Type::Function(_) | Type::Simple(SimpleType::Struct(_)) => {
         attr_ptr.as_basic_value_enum()
       }
-      _ => self.builder.build_load(attr_ptr, "load"),
+      _ => self.builder.build_load(attr_ptr, "load").unwrap(),
     }
   }
 
@@ -659,7 +663,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     let struct_ptr = self.builder.build_malloc(struct_type, "malloc").unwrap();
 
-    self.builder.build_store(struct_ptr, struct_value);
+    self.builder.build_store(struct_ptr, struct_value).unwrap();
 
     struct_ptr.as_basic_value_enum()
   }
@@ -677,11 +681,13 @@ impl<'ctx> CodeGen<'ctx> {
     let template_value = self
       .builder
       .build_global_string_ptr(&stringtemplate.string, "str_tmpl")
+      .unwrap()
       .as_basic_value_enum();
 
     let template_value_result = self
       .builder
       .build_global_string_ptr("", "str_tmpl_rstl")
+      .unwrap()
       .as_basic_value_enum();
 
     let mut sprintf_args =
@@ -693,6 +699,7 @@ impl<'ctx> CodeGen<'ctx> {
     self
       .builder
       .build_call(*sprintf, &sprintf_args[..], "run_str_tmpl")
+      .unwrap()
       .try_as_basic_value()
       .left()
       .unwrap();
