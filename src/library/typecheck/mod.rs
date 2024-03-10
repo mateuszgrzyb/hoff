@@ -11,10 +11,7 @@ use regex::Captures;
 
 use crate::library::typecheck::instantiate::Instantiate;
 
-use crate::library::{
-  ast::{qualified, typed, *},
-  utils::STRING_TEMPLATE_RE,
-};
+use crate::library::{ast::*, utils::STRING_TEMPLATE_RE};
 
 use crate::library::utils::MethodNamer;
 

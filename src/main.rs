@@ -1,4 +1,5 @@
 #![allow(clippy::upper_case_acronyms)]
+#![feature(impl_trait_in_assoc_type)]
 extern crate core;
 
 use clap::Parser;

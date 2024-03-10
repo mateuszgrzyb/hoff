@@ -112,8 +112,8 @@ impl Compile {
       global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
 
     let typed_global_decls = Arc::new(
-      untyped_global_decls
-        .and_then(|ds| global_decl_typechecker.check(ds))
+      global_decl_typechecker
+        .check(untyped_global_decls)
         .map(Arc::new),
     );
 

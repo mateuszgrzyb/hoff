@@ -1,12 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::library::ast::{qualified, typed, untyped};
-use anyhow::{anyhow, bail, Result};
-use macros::lock;
+use anyhow::{bail, Result};
 use rayon::prelude::*;
 pub struct ImportQualifier {
   global_decls: Arc<typed::Decls>,
-  decls: Arc<Mutex<typed::Decls>>,
 }
 
 pub trait ProcessImportQualifierNode {
@@ -19,8 +17,8 @@ impl ProcessImportQualifierNode for untyped::Mod {
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let name = self.name;
-    let defs = self.defs.process(ctx)?;
-    let imports = ctx._get_decls()?;
+
+    let (defs, imports) = self.defs.process(ctx)?;
 
     Ok(qualified::Mod {
       name,
@@ -31,35 +29,43 @@ impl ProcessImportQualifierNode for untyped::Mod {
 }
 
 impl ProcessImportQualifierNode for Vec<untyped::Def> {
-  type R = Result<Vec<qualified::Def>>;
+  type R = Result<(Vec<qualified::Def>, typed::Decls)>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
-    self
+    let (defs, decls) = self
       .into_par_iter()
       .map(|d| d.process(ctx))
-      .collect::<Result<Vec<_>, _>>()
+      .collect::<Result<Vec<_>, _>>()?
+      .into_iter()
+      .unzip::<_, _, Vec<_>, Vec<_>>();
+
+    Ok((defs, decls.into_iter().flatten().collect()))
   }
 }
 
 impl ProcessImportQualifierNode for untyped::Def {
-  type R = Result<qualified::Def>;
+  type R = Result<(qualified::Def, typed::Decls)>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     match self {
-      untyped::Def::Import(i) => i.process(ctx).map(qualified::Def::Import),
-      untyped::Def::Fun(f) => Ok(qualified::Def::Fun(f)),
-      untyped::Def::Struct(s) => Ok(qualified::Def::Struct(s)),
-      untyped::Def::Val(v) => Ok(qualified::Def::Val(v)),
-      untyped::Def::Class(c) => Ok(qualified::Def::Class(c)),
-      untyped::Def::Impl(i) => Ok(qualified::Def::Impl(i)),
+      untyped::Def::Import(i) => {
+        i.process(ctx).map(|(a, b)| (qualified::Def::Import(a), b))
+      }
+      untyped::Def::Fun(f) => Ok((qualified::Def::Fun(f), Vec::new())),
+      untyped::Def::Struct(s) => Ok((qualified::Def::Struct(s), Vec::new())),
+      untyped::Def::Val(v) => Ok((qualified::Def::Val(v), Vec::new())),
+      untyped::Def::Class(c) => Ok((qualified::Def::Class(c), Vec::new())),
+      untyped::Def::Impl(i) => Ok((qualified::Def::Impl(i), Vec::new())),
     }
   }
 }
 
 impl ProcessImportQualifierNode for untyped::Import {
-  type R = Result<qualified::Import>;
+  type R = Result<(qualified::Import, typed::Decls)>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
+    let mut decls = Vec::new();
+
     let (_, name) = self;
 
     let Some(d) = ctx
@@ -73,7 +79,7 @@ impl ProcessImportQualifierNode for untyped::Import {
 
     // auto import all impls if class is imported
     if let typed::Decl::Class(c) = &d {
-      let class_impls = ctx
+      let mut class_impls = ctx
         .global_decls
         .iter()
         .filter_map(|d| match d {
@@ -83,13 +89,11 @@ impl ProcessImportQualifierNode for untyped::Import {
         .filter(|i| i.class_name == c.name)
         .map(|i| typed::Decl::Impl(i.clone()))
         .collect::<Vec<_>>();
-      // TODO: OPTIMIZE PLZ, WHAT EVEN IS THIS YOU LAZY !!!
-      for class_impl in class_impls {
-        ctx._push_decl_if_not_exist(class_impl)?
-      }
+
+      decls.append(&mut class_impls);
     };
 
-    ctx._push_decl(d.clone())?;
+    decls.push(d.clone());
 
     let i = match d {
       typed::Decl::Fun(f) => qualified::Import::Fun(f),
@@ -99,35 +103,12 @@ impl ProcessImportQualifierNode for untyped::Import {
       typed::Decl::Impl(i) => qualified::Import::Impl(i),
     };
 
-    Ok(i)
+    Ok((i, decls))
   }
 }
 
 impl ImportQualifier {
   pub fn create(global_decls: Arc<typed::Decls>) -> Self {
-    Self {
-      global_decls,
-      decls: Arc::new(Mutex::new(Vec::new())),
-    }
-  }
-
-  fn _push_decl_if_not_exist(&self, d: typed::Decl) -> Result<()> {
-    lock!(mut decls);
-    if !decls.contains(&d) {
-      decls.push(d);
-    };
-
-    Ok(())
-  }
-
-  fn _push_decl(&self, d: typed::Decl) -> Result<()> {
-    lock!(mut decls);
-    decls.push(d);
-    Ok(())
-  }
-
-  fn _get_decls(&self) -> Result<typed::Decls> {
-    lock!(decls);
-    Ok(decls.clone())
+    Self { global_decls }
   }
 }
