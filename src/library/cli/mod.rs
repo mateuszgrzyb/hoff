@@ -3,7 +3,7 @@ use clap::{arg, value_parser, Parser, ValueEnum};
 #[derive(ValueEnum, Clone, Debug)]
 #[value(rename_all = "lower")]
 pub enum RunMode {
-  JIT,
+  Jit,
   Compile,
 }
 

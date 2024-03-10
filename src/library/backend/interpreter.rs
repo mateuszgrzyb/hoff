@@ -1,15 +1,25 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
 use inkwell::{context::Context, execution_engine::ExecutionEngine};
 
 use crate::library::{
   ast::{typed, untyped, SimpleType},
   backend::get_opt_level,
   codegen::{Codegen, ProcessCodegenNode as _},
-  qualify::{ImportQualifier, ProcessImportQualifierNode as _},
-  typecheck::{ProcessTypecheckerNode as _, Typechecker},
+  qualify::{
+    ImportQualifier, ImportQualifierError, ProcessImportQualifierNode as _,
+  },
+  typecheck::{ProcessTypecheckerNode as _, TypecheckError, Typechecker},
 };
+
+use derive_more::From;
+
+#[derive(Debug, From)]
+pub enum InterpreterError {
+  Typecheck(TypecheckError),
+  ImportQualifier(ImportQualifierError),
+  JITError,
+}
 
 pub struct Interpreter<'ctx> {
   typechecker: Typechecker,
@@ -43,14 +53,20 @@ impl<'ctx> Interpreter<'ctx> {
     }
   }
 
-  pub fn eval(&mut self, repl: untyped::Repl) -> Result<String> {
+  pub fn eval(
+    &mut self,
+    repl: untyped::Repl,
+  ) -> Result<String, InterpreterError> {
     match repl {
       untyped::Repl::Expr(expr) => self.eval_expr(expr),
       untyped::Repl::Def(decl) => self.eval_decl(decl),
     }
   }
 
-  fn eval_expr(&mut self, expr: untyped::Expr) -> Result<String> {
+  fn eval_expr(
+    &mut self,
+    expr: untyped::Expr,
+  ) -> Result<String, InterpreterError> {
     let (body, rt) = self.typechecker.get_type_of_expr(expr)?;
 
     let main_mod = self.create_main(body, rt.clone())?;
@@ -59,7 +75,7 @@ impl<'ctx> Interpreter<'ctx> {
 
     let return_value_repr = unsafe {
       let Ok(main) = self.execution_engine.get_function_value("main") else {
-        bail!("some error happened")
+        return Err(InterpreterError::JITError);
       };
 
       let return_value = self.execution_engine.run_function(main, &[]);
@@ -82,7 +98,10 @@ impl<'ctx> Interpreter<'ctx> {
     Ok(return_value_repr)
   }
 
-  fn eval_decl(&mut self, def: untyped::Def) -> Result<String> {
+  fn eval_decl(
+    &mut self,
+    def: untyped::Def,
+  ) -> Result<String, InterpreterError> {
     let sig = format!("{:?}", def);
     self.defs.push(def);
     Ok(sig)
@@ -92,7 +111,7 @@ impl<'ctx> Interpreter<'ctx> {
     &mut self,
     body: typed::Expr,
     rt: typed::Type,
-  ) -> Result<typed::Mod> {
+  ) -> Result<typed::Mod, InterpreterError> {
     let main = typed::FunDef {
       sig: typed::FunSig {
         name: "main".to_string(),

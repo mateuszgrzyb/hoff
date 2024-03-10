@@ -2,24 +2,41 @@ mod utils;
 
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use derive_more::From;
 use inkwell::{context::Context, module::Module};
+use peg::{error::ParseError, str::LineCol};
 use rayon::prelude::*;
 
 use crate::library::{
   ast::{qualified, typed, untyped},
-  backend::{Backend, Compiler, JITExecutor},
+  backend::{Backend, Compiler, CompilerError, JitExecutor, JitExecutorError},
   cli::{Args, DumpMode, RunMode},
   codegen::{Codegen, ProcessCodegenNode},
   parser::parse,
   qualify::{
-    GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
-    ProcessImportQualifierNode,
+    GdtError, GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
+    ImportQualifierError, ProcessImportQualifierNode,
   },
-  typecheck::Typechecker,
+  typecheck::{TypecheckError, Typechecker},
 };
 
-use self::utils::InputFile;
+use self::utils::{InputFile, InputFileError};
+
+#[derive(Debug, From, Clone)]
+pub enum CompileError {
+  InputFile(InputFileError),
+  Parse(ParseError<LineCol>),
+  ImportQualifier(ImportQualifierError),
+  Gdt(GdtError),
+  Typecheck(TypecheckError),
+  #[from(ignore)]
+  ModuleVerification(String),
+  #[from(ignore)]
+  ModuleLinkage(String),
+  NoFiles,
+  JitExecutor(JitExecutorError),
+  Compiler(CompilerError),
+}
 
 pub struct Compile {
   args: Args,
@@ -32,7 +49,7 @@ impl Compile {
     Self { args, context }
   }
 
-  pub fn compile(&self) -> Result<()> {
+  pub fn compile(&self) -> Result<(), CompileError> {
     let files = self.read_files();
 
     let modules = self.parse_files(files);
@@ -65,7 +82,7 @@ impl Compile {
     let o = self.args.o;
 
     match self.args.mode {
-      RunMode::JIT => JITExecutor::create(m, o).run()?,
+      RunMode::Jit => JitExecutor::create(m, o).run()?,
       RunMode::Compile => Compiler::create(m, o).run()?,
     };
 
@@ -74,16 +91,17 @@ impl Compile {
 
   fn read_files(
     &self,
-  ) -> impl ParallelIterator<Item = Result<InputFile>> + Clone {
-    InputFile::read_files(self.args.paths.clone())
+  ) -> impl ParallelIterator<Item = Result<InputFile, CompileError>> + Clone
+  {
+    InputFile::read_files(self.args.paths.clone()).map(|f| Ok(f?))
   }
 
   fn parse_files<FS>(
     &self,
     files: FS,
-  ) -> impl ParallelIterator<Item = Result<untyped::Mod>> + Clone
+  ) -> impl ParallelIterator<Item = Result<untyped::Mod, CompileError>> + Clone
   where
-    FS: ParallelIterator<Item = Result<InputFile>> + Clone,
+    FS: ParallelIterator<Item = Result<InputFile, CompileError>> + Clone,
   {
     #[allow(clippy::let_unit_value)]
     files.map(|f| {
@@ -101,9 +119,11 @@ impl Compile {
   fn qualify_modules<MS>(
     &self,
     ms: MS,
-  ) -> impl ParallelIterator<Item = Result<qualified::Mod>>
+  ) -> impl ParallelIterator<Item = Result<qualified::Mod, CompileError>>
   where
-    MS: ParallelIterator<Item = Result<untyped::Mod>> + Clone + 'static,
+    MS: ParallelIterator<Item = Result<untyped::Mod, CompileError>>
+      + Clone
+      + 'static,
   {
     let global_decl_collector = GlobalDeclCollector::create();
     let mut global_decl_typechecker = GlobalDeclTypechecker::create();
@@ -122,29 +142,37 @@ impl Compile {
 
       let qualifier = match typed_global_decls.as_ref() {
         Ok(tgds) => Ok(ImportQualifier::create(tgds.clone())),
-        Err(e) => Err(anyhow!(e.to_string())),
+        Err(e) => Err(e),
       };
 
-      module?.process(&qualifier?)
+      let module = module?;
+      let qualifier = qualifier.map_err(|e| e.clone())?;
+
+      let result = module.process(&qualifier)?;
+      Ok(result)
     })
   }
 
   fn typecheck_modules<QMS>(
     &self,
     qms: QMS,
-  ) -> impl ParallelIterator<Item = Result<typed::Mod>>
+  ) -> impl ParallelIterator<Item = Result<typed::Mod, CompileError>>
   where
-    QMS: ParallelIterator<Item = Result<qualified::Mod>>,
+    QMS: ParallelIterator<Item = Result<qualified::Mod, CompileError>>,
   {
-    qms.map(|module| Typechecker::create(module?).check())
+    qms.map(|module| {
+      let module = module?;
+      let result = Typechecker::create(module).check()?;
+      Ok(result)
+    })
   }
 
   fn compile_modules<TMS>(
     &self,
     tms: TMS,
-  ) -> impl Iterator<Item = Result<Codegen>>
+  ) -> impl Iterator<Item = Result<Codegen, CompileError>>
   where
-    TMS: ParallelIterator<Item = Result<typed::Mod>>,
+    TMS: ParallelIterator<Item = Result<typed::Mod, CompileError>>,
   {
     let evaluated_tms = tms.collect::<Vec<_>>();
 
@@ -160,33 +188,39 @@ impl Compile {
   fn verify_modules<'ctx, 'a, CGS>(
     &'a self,
     cgs: CGS,
-  ) -> impl Iterator<Item = Result<Codegen<'ctx>>> + 'a
+  ) -> impl Iterator<Item = Result<Codegen<'ctx>, CompileError>> + 'a
   where
-    CGS: Iterator<Item = Result<Codegen<'ctx>>> + 'a,
+    CGS: Iterator<Item = Result<Codegen<'ctx>, CompileError>> + 'a,
   {
     cgs.map(move |c| {
       let c = c?;
 
       if !self.args.no_verify_llvm {
-        c.module.verify().map_err(|e| anyhow!(e.to_string()))?;
+        c.module
+          .verify()
+          .map_err(|e| CompileError::ModuleVerification(e.to_string()))?;
       };
 
       Ok(c)
     })
   }
 
-  fn link_modules<'ctx, CGS>(&self, cgs: CGS) -> Result<Module<'ctx>>
+  fn link_modules<'ctx, CGS>(
+    &self,
+    cgs: CGS,
+  ) -> Result<Module<'ctx>, CompileError>
   where
-    CGS: Iterator<Item = Result<Codegen<'ctx>>>,
+    CGS: Iterator<Item = Result<Codegen<'ctx>, CompileError>>,
   {
     cgs
       .map(|codegen| Ok(codegen?.module))
-      .reduce(|m1: Result<Module>, m2| {
+      .reduce(|m1, m2| {
         let m1 = m1?;
         let m2 = m2?;
-        m1.link_in_module(m2).map_err(|e| anyhow!(e.to_string()))?;
+        m1.link_in_module(m2)
+          .map_err(|e| CompileError::ModuleLinkage(e.to_string()))?;
         Ok(m1)
       })
-      .ok_or_else(|| anyhow!("No files were compiled"))?
+      .ok_or_else(|| CompileError::NoFiles)?
   }
 }

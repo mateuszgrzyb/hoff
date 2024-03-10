@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
 use crate::library::ast::{qualified, typed, untyped};
-use anyhow::{bail, Result};
 use rayon::prelude::*;
 pub struct ImportQualifier {
   global_decls: Arc<typed::Decls>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ImportQualifierError {
+  CannotImport(String),
 }
 
 pub trait ProcessImportQualifierNode {
@@ -13,7 +17,7 @@ pub trait ProcessImportQualifierNode {
 }
 
 impl ProcessImportQualifierNode for untyped::Mod {
-  type R = Result<qualified::Mod>;
+  type R = Result<qualified::Mod, ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let name = self.name;
@@ -29,7 +33,7 @@ impl ProcessImportQualifierNode for untyped::Mod {
 }
 
 impl ProcessImportQualifierNode for Vec<untyped::Def> {
-  type R = Result<(Vec<qualified::Def>, typed::Decls)>;
+  type R = Result<(Vec<qualified::Def>, typed::Decls), ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let (defs, decls) = self
@@ -44,7 +48,7 @@ impl ProcessImportQualifierNode for Vec<untyped::Def> {
 }
 
 impl ProcessImportQualifierNode for untyped::Def {
-  type R = Result<(qualified::Def, typed::Decls)>;
+  type R = Result<(qualified::Def, typed::Decls), ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     match self {
@@ -61,7 +65,7 @@ impl ProcessImportQualifierNode for untyped::Def {
 }
 
 impl ProcessImportQualifierNode for untyped::Import {
-  type R = Result<(qualified::Import, typed::Decls)>;
+  type R = Result<(qualified::Import, typed::Decls), ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let mut decls = Vec::new();
@@ -74,7 +78,7 @@ impl ProcessImportQualifierNode for untyped::Import {
       .find(|d| d.get_name() == &name)
       .cloned()
     else {
-      bail!("{} cannot be imported", name);
+      return Err(ImportQualifierError::CannotImport(name));
     };
 
     // auto import all impls if class is imported
