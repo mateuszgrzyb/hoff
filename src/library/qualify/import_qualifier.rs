@@ -1,12 +1,16 @@
 use std::sync::{Arc, Mutex};
 
 use crate::library::ast::{qualified, typed, untyped};
-use anyhow::{anyhow, bail, Result};
-use macros::lock;
 use rayon::prelude::*;
 pub struct ImportQualifier {
   global_decls: Arc<typed::Decls>,
   decls: Arc<Mutex<typed::Decls>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ImportQualifierError {
+  CannotImport(String),
+  CannotLock,
 }
 
 pub trait ProcessImportQualifierNode {
@@ -15,7 +19,7 @@ pub trait ProcessImportQualifierNode {
 }
 
 impl ProcessImportQualifierNode for untyped::Mod {
-  type R = Result<qualified::Mod>;
+  type R = Result<qualified::Mod, ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let name = self.name;
@@ -31,7 +35,7 @@ impl ProcessImportQualifierNode for untyped::Mod {
 }
 
 impl ProcessImportQualifierNode for Vec<untyped::Def> {
-  type R = Result<Vec<qualified::Def>>;
+  type R = Result<Vec<qualified::Def>, ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     self
@@ -42,7 +46,7 @@ impl ProcessImportQualifierNode for Vec<untyped::Def> {
 }
 
 impl ProcessImportQualifierNode for untyped::Def {
-  type R = Result<qualified::Def>;
+  type R = Result<qualified::Def, ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     match self {
@@ -57,7 +61,7 @@ impl ProcessImportQualifierNode for untyped::Def {
 }
 
 impl ProcessImportQualifierNode for untyped::Import {
-  type R = Result<qualified::Import>;
+  type R = Result<qualified::Import, ImportQualifierError>;
 
   fn process(self, ctx: &ImportQualifier) -> Self::R {
     let (_, name) = self;
@@ -68,7 +72,7 @@ impl ProcessImportQualifierNode for untyped::Import {
       .find(|d| d.get_name() == &name)
       .cloned()
     else {
-      bail!("{} cannot be imported", name);
+      return Err(ImportQualifierError::CannotImport(name));
     };
 
     // auto import all impls if class is imported
@@ -111,8 +115,14 @@ impl ImportQualifier {
     }
   }
 
-  fn _push_decl_if_not_exist(&self, d: typed::Decl) -> Result<()> {
-    lock!(mut decls);
+  fn _push_decl_if_not_exist(
+    &self,
+    d: typed::Decl,
+  ) -> Result<(), ImportQualifierError> {
+    let mut decls = self
+      .decls
+      .lock()
+      .map_err(|_| ImportQualifierError::CannotLock)?;
     if !decls.contains(&d) {
       decls.push(d);
     };
@@ -120,14 +130,20 @@ impl ImportQualifier {
     Ok(())
   }
 
-  fn _push_decl(&self, d: typed::Decl) -> Result<()> {
-    lock!(mut decls);
+  fn _push_decl(&self, d: typed::Decl) -> Result<(), ImportQualifierError> {
+    let mut decls = self
+      .decls
+      .lock()
+      .map_err(|_| ImportQualifierError::CannotLock)?;
     decls.push(d);
     Ok(())
   }
 
-  fn _get_decls(&self) -> Result<typed::Decls> {
-    lock!(decls);
+  fn _get_decls(&self) -> Result<typed::Decls, ImportQualifierError> {
+    let decls = self
+      .decls
+      .lock()
+      .map_err(|_| ImportQualifierError::CannotLock)?;
     Ok(decls.clone())
   }
 }

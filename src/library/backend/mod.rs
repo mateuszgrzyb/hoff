@@ -2,16 +2,16 @@ mod compiler;
 mod interpreter;
 mod jit_executor;
 
-use anyhow::Result;
+use inkwell::OptimizationLevel;
 use std::mem::transmute;
 
-pub use compiler::Compiler;
-use inkwell::OptimizationLevel;
+pub use compiler::{Compiler, CompilerError};
 pub use interpreter::Interpreter;
-pub use jit_executor::JITExecutor;
+pub use jit_executor::{JitExecutor, JitExecutorError};
 
 pub trait Backend {
-  fn run(&self) -> Result<()>;
+  type E: std::fmt::Debug;
+  fn run(&self) -> Result<(), Self::E>;
 }
 
 fn get_opt_level(opt_level: u8) -> OptimizationLevel {

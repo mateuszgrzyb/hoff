@@ -1,4 +1,3 @@
-use anyhow::{bail, Result};
 use std::collections::HashMap;
 
 use crate::library::{ast::untyped, qualify::Nameable};
@@ -14,6 +13,11 @@ pub enum Mark {
 pub struct MarkedNode<T> {
   pub mark: Mark,
   pub elem: T,
+}
+
+#[derive(Debug, Clone)]
+pub enum SorterError {
+  CyclicReference,
 }
 
 pub trait Sortable<S> {
@@ -90,7 +94,7 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
     }
   }
 
-  pub fn sort(&mut self) -> Result<Vec<T>> {
+  pub fn sort(&mut self) -> Result<Vec<T>, SorterError> {
     loop {
       let marks = self.marks.clone();
 
@@ -106,10 +110,10 @@ impl<T: Nameable + Clone + Sortable<T>> Sorter<T> {
     }
   }
 
-  fn visit(&mut self, node: &MarkedNode<T>) -> Result<()> {
+  fn visit(&mut self, node: &MarkedNode<T>) -> Result<(), SorterError> {
     match node.mark {
       Mark::Perm => return Ok(()),
-      Mark::Temp => bail!("cyclic reference found"),
+      Mark::Temp => return Err(SorterError::CyclicReference),
       Mark::None => {
         let elem = node.elem.clone();
 

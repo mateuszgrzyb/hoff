@@ -3,8 +3,6 @@ use std::{
   fs::{read_dir, read_to_string, write},
 };
 
-use anyhow::{anyhow, Result};
-
 use itertools::Itertools;
 use rayon::{iter::once, prelude::*};
 
@@ -14,16 +12,20 @@ use crate::library::{
   qualify::Nameable,
 };
 
-pub fn dump<I, IS>(args: &Args, is: IS) -> Result<()>
+use derive_more::From;
+
+pub fn dump<I, IS, E>(args: &Args, is: IS) -> Result<(), E>
 where
   I: Debug + Nameable,
-  IS: ParallelIterator<Item = Result<I>>,
+  IS: ParallelIterator<Item = Result<I, E>>,
+  E: Send,
 {
-  is.try_for_each(|i: Result<I>| -> Result<()> {
+  is.try_for_each(|i: Result<I, E>| -> Result<(), E> {
     let i = i?;
     let contents = format!("{:#?}", i);
     match args.dump_target {
-      DumpTarget::File => write(i.get_name(), contents)?,
+      //DumpTarget::File => write(i.get_name(), contents)?,
+      DumpTarget::File => write(i.get_name(), contents).unwrap(),
       DumpTarget::StdOut => println!("{contents}"),
     }
 
@@ -33,19 +35,18 @@ where
   Ok(())
 }
 
-pub fn dump_llvm<'ctx, CGS>(args: &Args, codegens: CGS) -> Result<()>
+pub fn dump_llvm<'ctx, CGS, E>(args: &Args, codegens: CGS) -> Result<(), E>
 where
-  CGS: Iterator<Item = Result<Codegen<'ctx>>>,
+  CGS: Iterator<Item = Result<Codegen<'ctx>, E>>,
 {
   for codegen in codegens {
     let codegen = codegen?;
-    let filename = codegen.module.get_source_file_name().to_str()?;
+    //let filename = codegen.module.get_source_file_name().to_str()?;
+    let filename = codegen.module.get_source_file_name().to_str().unwrap();
 
     match args.dump_target {
-      DumpTarget::File => codegen
-        .module
-        .print_to_file(filename)
-        .map_err(|e| anyhow!(e.to_string()))?,
+      DumpTarget::File => codegen.module.print_to_file(filename).unwrap(),
+      //.map_err(|e| anyhow!(e.to_string()))?,
       DumpTarget::StdOut => {
         println!("{}", codegen.module.to_string())
       }
@@ -53,6 +54,21 @@ where
   }
 
   Ok(())
+}
+
+#[derive(Debug, From)]
+pub enum InputFileError {
+  IOError(std::io::Error),
+  OSError(std::ffi::OsString),
+}
+
+impl Clone for InputFileError {
+  fn clone(&self) -> Self {
+    todo!()
+    // match self {
+    //   Self::IOError(arg0) => Self::IOError(arg0.clone()),
+    // }
+  }
 }
 
 #[derive(Clone)]
@@ -64,58 +80,48 @@ pub struct InputFile {
 impl InputFile {
   pub fn read_files(
     paths: Vec<String>,
-  ) -> impl ParallelIterator<Item = Result<Self>> + Clone {
+  ) -> impl ParallelIterator<Item = Result<Self, InputFileError>> + Clone {
     Self::_read_files(paths.into_par_iter().map(Ok))
-      .map(|i| i.map_err(|e| anyhow!(e)))
   }
 
   fn _read_files<PS>(
     paths: PS,
-  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone
+  ) -> impl ParallelIterator<Item = Result<Self, InputFileError>> + Clone
   where
-    PS: ParallelIterator<Item = Result<String, String>> + Clone,
+    PS: ParallelIterator<Item = Result<String, InputFileError>> + Clone,
   {
     paths.flat_map(Self::_read_file)
   }
 
   fn _read_file(
-    path: Result<String, String>,
-  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
-    let file: Result<Self, String> =
-      path.and_then(|path| -> Result<Self, String> {
-        match read_to_string(&path) {
-          Err(e) => Err(e.to_string()),
-          Ok(contents) => Ok(InputFile {
-            name: path,
-            contents,
-          }),
-        }
-      });
+    path: Result<String, InputFileError>,
+  ) -> impl ParallelIterator<Item = Result<Self, InputFileError>> + Clone {
+    let file: Result<InputFile, InputFileError> = path.and_then(|path| {
+      let contents = read_to_string(&path)?;
+      Ok(InputFile {
+        name: path,
+        contents,
+      })
+    });
 
     once(file)
   }
 
   fn _read_dir(
     path: String,
-  ) -> impl ParallelIterator<Item = Result<Self, String>> + Clone {
+  ) -> impl ParallelIterator<Item = Result<Self, InputFileError>> + Clone {
     let sub_paths = read_dir(path);
 
     let sub_paths = match sub_paths {
-      Ok(o) => o
-        .into_iter()
-        .map(|e| e.map_err(|e| format!("{:?}", e)))
-        .collect_vec(),
-      Err(e) => vec![Err(e.to_string())],
+      Ok(o) => o.into_iter().collect_vec(),
+      Err(e) => vec![Err(e)],
     };
 
     let sub_paths = sub_paths
       .into_iter()
       .map(|p| {
-        p.map_err(|e| format!("{:?}", e))?
-          .path()
-          .into_os_string()
-          .into_string()
-          .map_err(|e| format!("{:?}", e))
+        Ok(p?.path().into_os_string().into_string()?)
+        //.map_err(|e| format!("{:?}", e))
       })
       .collect_vec();
 

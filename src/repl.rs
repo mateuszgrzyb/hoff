@@ -3,20 +3,19 @@ use std::{
   sync::Arc,
 };
 
-use anyhow::{bail, Result};
 use inkwell::context::Context;
 
 use crate::library::{
   ast::typed::Decls, backend::Interpreter, cli::Args, parser::parse_repl,
 };
 
-pub struct REPL {
+pub struct Repl {
   args: Args,
   context: Context,
   global_decls: Arc<Decls>,
 }
 
-impl REPL {
+impl Repl {
   pub fn create(args: Args) -> Self {
     let context = Context::create();
     let global_decls = Arc::new(Vec::new());
@@ -50,7 +49,7 @@ impl REPL {
 
       let Ok(result) = interpreter
         .eval(expr)
-        .map_err(|err| println!("Eval error: {}", err))
+        .map_err(|err| println!("Eval error: {:?}", err))
       else {
         continue;
       };
@@ -66,14 +65,14 @@ impl REPL {
       .unwrap_or_else(|err| panic!("flush error: {}", err));
   }
 
-  fn read_input() -> Result<String> {
+  fn read_input() -> Result<String, String> {
     Self::print_and_flush(">>> ");
 
     let mut input = String::new();
 
     while !input.contains(";;") {
       if let Err(err) = stdin().read_line(&mut input) {
-        bail!(err)
+        return Err(err.to_string());
       }
 
       Self::print_and_flush("... ");

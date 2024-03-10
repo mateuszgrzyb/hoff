@@ -1,28 +1,32 @@
-#![allow(clippy::upper_case_acronyms)]
-extern crate core;
-
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
 
-use crate::{compile::Compile, library::cli::Args, repl::REPL};
-use anyhow::Result;
+use crate::{compile::Compile, library::cli::Args, repl::Repl};
 
 mod compile;
 mod library;
 mod repl;
 
-fn main() -> Result<()> {
+fn main() {
   let args: Args = Args::parse();
 
   if args.threads > 0 {
     ThreadPoolBuilder::new()
       .num_threads(args.threads)
-      .build_global()?
+      .build_global()
+      .unwrap()
   }
 
   if args.repl {
-    REPL::create(args).run_loop()
+    Repl::create(args).run_loop()
   } else {
-    Compile::create(args).compile()
+    let result = Compile::create(args).compile();
+
+    match result {
+      Ok(_) => {}
+      Err(e) => {
+        println!("ERROR: {:?}", e)
+      }
+    }
   }
 }
