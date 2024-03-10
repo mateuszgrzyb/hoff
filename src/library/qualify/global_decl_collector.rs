@@ -1,119 +1,102 @@
-use std::sync::{Arc, Mutex};
-
 use rayon::prelude::*;
 
 use crate::library::ast::untyped::*;
 
-pub struct GlobalDeclCollector {
-  decls: Arc<Mutex<Decls>>,
-}
+pub struct GlobalDeclCollector {}
 
-#[derive(Debug, Clone)]
-pub enum GdcError {
-  CannotLock,
-}
-
-pub trait ProcessGDCNode {
+pub trait ProcessGDCNode<'ctx> {
   type R;
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R;
+  fn process(self, ctx: &'ctx GlobalDeclCollector) -> Self::R;
 }
 
-impl ProcessGDCNode for &Mod {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for Mod {
+  type R = impl ParallelIterator<Item = Decl> + 'ctx;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
-    for d in &self.defs {
-      d.process(ctx)?;
-    }
-
-    Ok(())
+  fn process(self, ctx: &'ctx GlobalDeclCollector) -> Self::R {
+    self.defs.into_par_iter().filter_map(|d| d.process(ctx))
   }
 }
 
-impl ProcessGDCNode for &Def {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx Def {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+  fn process(self, ctx: &'ctx GlobalDeclCollector) -> Self::R {
     match self {
       Def::Fun(f) => f.process(ctx),
       Def::Struct(s) => s.process(ctx),
       Def::Val(v) => v.process(ctx),
-      Def::Import(_) => Ok(()),
+      Def::Import(_) => None,
       Def::Class(c) => c.process(ctx),
       Def::Impl(i) => i.process(ctx),
     }
   }
 }
 
-impl ProcessGDCNode for &FunDef {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx FunDef {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+  fn process(self, ctx: &'ctx GlobalDeclCollector) -> Self::R {
     let fundecl = ctx.get_fun_sig(self);
-    ctx._push_decl(Decl::Fun(fundecl))
+    Some(Decl::Fun(fundecl))
   }
 }
 
-impl ProcessGDCNode for &StructDef {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx StructDef {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
-    ctx._push_decl(Decl::Struct(self.clone()))
+  fn process(self, _ctx: &'ctx GlobalDeclCollector) -> Self::R {
+    Some(Decl::Struct(self.clone()))
   }
 }
 
-impl ProcessGDCNode for &ValDef {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx ValDef {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+  fn process(self, ctx: &'ctx GlobalDeclCollector) -> Self::R {
     let valdecl = ValDecl {
       name: self.name.clone(),
       t: self.t.clone(),
       inner_vals: ctx.get_inner_vals(self.expr.clone()),
     };
-    ctx._push_decl(Decl::Val(valdecl))
+    Some(Decl::Val(valdecl))
   }
 }
 
-impl ProcessGDCNode for &ClassDef {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx ClassDef {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+  fn process(self, _ctx: &'ctx GlobalDeclCollector) -> Self::R {
     let class = ClassDef {
       name: self.name.clone(),
       methods: self.methods.clone(),
     };
-    ctx._push_decl(Decl::Class(class))
+    Some(Decl::Class(class))
   }
 }
 
-impl ProcessGDCNode for &ImplDef {
-  type R = Result<(), GdcError>;
+impl<'ctx> ProcessGDCNode<'ctx> for &'ctx ImplDef {
+  type R = Option<Decl>;
 
-  fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
+  fn process(self, _ctx: &'ctx GlobalDeclCollector) -> Self::R {
     let impldecl = ImplDecl {
       class_name: self.class_name.clone(),
       t: self.t.clone(),
       impls: self.impls.clone().into_iter().map(|i| i.sig).collect(),
     };
-    ctx._push_decl(Decl::Impl(impldecl))
+    Some(Decl::Impl(impldecl))
   }
 }
 
 impl GlobalDeclCollector {
   pub fn create() -> Self {
-    Self {
-      decls: Arc::new(Mutex::new(Vec::new())),
-    }
+    Self {}
   }
 
-  pub fn collect<MS>(&self, ms: MS) -> Result<Decls, GdcError>
+  pub fn collect<MS>(&self, ms: MS) -> Decls
   where
     MS: ParallelIterator<Item = Mod>,
   {
-    ms.try_for_each(|m| m.process(self))?;
-
-    self._return_decls()
+    ms.flat_map(|m| m.process(self)).collect()
   }
 
   fn get_fun_sig(&self, f: &FunDef) -> FunSig {
@@ -145,16 +128,5 @@ impl GlobalDeclCollector {
     es.into_iter()
       .flat_map(|arg| self.get_inner_vals(arg))
       .collect()
-  }
-
-  fn _push_decl(&self, decl: Decl) -> Result<(), GdcError> {
-    let mut decls = self.decls.lock().map_err(|_| GdcError::CannotLock)?;
-    decls.push(decl);
-    Ok(())
-  }
-
-  fn _return_decls(&self) -> Result<Decls, GdcError> {
-    let decls = self.decls.lock().map_err(|_| GdcError::CannotLock)?;
-    Ok(decls.clone())
   }
 }

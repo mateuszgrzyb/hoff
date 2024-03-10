@@ -122,7 +122,7 @@ impl<'ctx> Interpreter<'ctx> {
     };
 
     let defs = self.defs.clone();
-    let defs = defs.process(&self.qualifier)?;
+    let (defs, _) = defs.process(&self.qualifier)?;
     let mut defs = defs.process(&mut self.typechecker)?;
 
     defs.push(typed::Def::Fun(main));

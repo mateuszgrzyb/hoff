@@ -14,8 +14,8 @@ use crate::library::{
   codegen::{Codegen, ProcessCodegenNode},
   parser::parse,
   qualify::{
-    GdcError, GdtError, GlobalDeclCollector, GlobalDeclTypechecker,
-    ImportQualifier, ImportQualifierError, ProcessImportQualifierNode,
+    GdtError, GlobalDeclCollector, GlobalDeclTypechecker, ImportQualifier,
+    ImportQualifierError, ProcessImportQualifierNode,
   },
   typecheck::{TypecheckError, Typechecker},
 };
@@ -26,7 +26,6 @@ use self::utils::{InputFile, InputFileError};
 pub enum CompileError {
   InputFile(InputFileError),
   Parse(ParseError<LineCol>),
-  Gdc(GdcError),
   ImportQualifier(ImportQualifierError),
   Gdt(GdtError),
   Typecheck(TypecheckError),
@@ -133,12 +132,8 @@ impl Compile {
       global_decl_collector.collect(ms.clone().filter_map(|m| m.ok()));
 
     let typed_global_decls = Arc::new(
-      untyped_global_decls
-        .map_err(CompileError::Gdc)
-        .and_then(|ds| {
-          let r = global_decl_typechecker.check(ds)?;
-          Ok(r)
-        })
+      global_decl_typechecker
+        .check(untyped_global_decls)
         .map(Arc::new),
     );
 
