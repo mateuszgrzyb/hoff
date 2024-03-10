@@ -1,14 +1,16 @@
 use std::sync::{Arc, Mutex};
 
-use macros::lock;
 use rayon::prelude::*;
-
-use anyhow::{anyhow, Result};
 
 use crate::library::ast::untyped::*;
 
 pub struct GlobalDeclCollector {
   decls: Arc<Mutex<Decls>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum GdcError {
+  CannotLock,
 }
 
 pub trait ProcessGDCNode {
@@ -17,7 +19,7 @@ pub trait ProcessGDCNode {
 }
 
 impl ProcessGDCNode for &Mod {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     for d in &self.defs {
@@ -29,7 +31,7 @@ impl ProcessGDCNode for &Mod {
 }
 
 impl ProcessGDCNode for &Def {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     match self {
@@ -44,7 +46,7 @@ impl ProcessGDCNode for &Def {
 }
 
 impl ProcessGDCNode for &FunDef {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     let fundecl = ctx.get_fun_sig(self);
@@ -53,7 +55,7 @@ impl ProcessGDCNode for &FunDef {
 }
 
 impl ProcessGDCNode for &StructDef {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     ctx._push_decl(Decl::Struct(self.clone()))
@@ -61,7 +63,7 @@ impl ProcessGDCNode for &StructDef {
 }
 
 impl ProcessGDCNode for &ValDef {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     let valdecl = ValDecl {
@@ -74,7 +76,7 @@ impl ProcessGDCNode for &ValDef {
 }
 
 impl ProcessGDCNode for &ClassDef {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     let class = ClassDef {
@@ -86,7 +88,7 @@ impl ProcessGDCNode for &ClassDef {
 }
 
 impl ProcessGDCNode for &ImplDef {
-  type R = Result<()>;
+  type R = Result<(), GdcError>;
 
   fn process(self, ctx: &GlobalDeclCollector) -> Self::R {
     let impldecl = ImplDecl {
@@ -105,7 +107,7 @@ impl GlobalDeclCollector {
     }
   }
 
-  pub fn collect<MS>(&self, ms: MS) -> Result<Decls>
+  pub fn collect<MS>(&self, ms: MS) -> Result<Decls, GdcError>
   where
     MS: ParallelIterator<Item = Mod>,
   {
@@ -145,14 +147,14 @@ impl GlobalDeclCollector {
       .collect()
   }
 
-  fn _push_decl(&self, decl: Decl) -> Result<()> {
-    lock!(mut decls);
+  fn _push_decl(&self, decl: Decl) -> Result<(), GdcError> {
+    let mut decls = self.decls.lock().map_err(|_| GdcError::CannotLock)?;
     decls.push(decl);
     Ok(())
   }
 
-  fn _return_decls(&self) -> Result<Decls> {
-    lock!(decls);
+  fn _return_decls(&self) -> Result<Decls, GdcError> {
+    let decls = self.decls.lock().map_err(|_| GdcError::CannotLock)?;
     Ok(decls.clone())
   }
 }

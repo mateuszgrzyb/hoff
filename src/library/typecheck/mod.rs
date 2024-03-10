@@ -2,7 +2,6 @@ mod closure_manager;
 pub mod instantiate;
 mod namespace;
 
-use anyhow::{anyhow, bail, ensure, Result};
 use std::collections::HashMap;
 
 use closure_manager::ClosureManager;
@@ -12,7 +11,7 @@ use regex::Captures;
 use crate::library::typecheck::instantiate::Instantiate;
 
 use crate::library::{
-  ast::{qualified, typed, *},
+  ast::{qualified, typed},
   utils::STRING_TEMPLATE_RE,
 };
 
@@ -30,7 +29,31 @@ impl<V, T> TypedValue<V, T> {
   }
 }
 
-type CheckResult<V, T = typed::Type> = Result<TypedValue<V, T>>;
+#[derive(Debug, Clone)]
+pub enum TypecheckError {
+  ReturnTypeAndBodyMismatch(typed::Type, typed::Type),
+  DeclTypeAndValTypeMismatch(typed::Type, typed::Type),
+  NoClassWithName(String),
+  WrongImplementations(Vec<typed::FunSig>, Vec<typed::FunSig>),
+  UnequalBinopTypes(typed::Type, typed::Type),
+  CannotBinopFunctions(typed::Type, typed::Type),
+  InvalidBinopOperands(typed::Type, typed::Op, typed::Type),
+  InvalidNoOfFunArgs(usize, usize),
+  InvalidFunArgType(typed::Type, typed::Type),
+  InvalidIfExprTypes(typed::Type, typed::Type, typed::Type),
+  StructDoesNotExist(String),
+  StructAttrDoesNotExist(String, String),
+  InvalidAssignTypes(typed::Type, typed::Type),
+  NonSimpleMethodType(typed::Type),
+  NoStructWithName(String),
+  NoFunWithName(String),
+  NoValWithName(String),
+  NoMethodForType(String, typed::Type),
+}
+
+type Result<V, E = TypecheckError> = std::result::Result<V, E>;
+type CheckResult<V, T = typed::Type> =
+  std::result::Result<TypedValue<V, T>, TypecheckError>;
 
 pub trait ProcessTypecheckerNode {
   type R;
@@ -53,14 +76,14 @@ impl ProcessTypecheckerNode for qualified::Def {
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     match self {
-      Def::Fun(f) => FunctionExpr { f, closure: () }
+      qualified::Def::Fun(f) => qualified::FunctionExpr { f, closure: () }
         .process(ctx)
-        .map(|tv| Def::Fun(tv.v.f)),
-      Def::Struct(s) => s.process(ctx).map(Def::Struct),
-      Def::Val(v) => v.process(ctx).map(Def::Val),
-      Def::Import(i) => i.process(ctx).map(Def::Import),
-      Def::Class(c) => c.process(ctx).map(Def::Class),
-      Def::Impl(i) => i.process(ctx).map(Def::Impl),
+        .map(|tv| typed::Def::Fun(tv.v.f)),
+      qualified::Def::Struct(s) => s.process(ctx).map(typed::Def::Struct),
+      qualified::Def::Val(v) => v.process(ctx).map(typed::Def::Val),
+      qualified::Def::Import(i) => i.process(ctx).map(typed::Def::Import),
+      qualified::Def::Class(c) => c.process(ctx).map(typed::Def::Class),
+      qualified::Def::Impl(i) => i.process(ctx).map(typed::Def::Impl),
     }
   }
 }
@@ -68,6 +91,8 @@ impl ProcessTypecheckerNode for qualified::Def {
 impl ProcessTypecheckerNode for qualified::FunctionExpr {
   type R = CheckResult<typed::FunctionExpr>;
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let TypedValue { v: sig, t } = ctx.typecheck_funsig(self.f.sig, false)?;
 
     sig.args.iter().for_each(|arg| {
@@ -86,12 +111,9 @@ impl ProcessTypecheckerNode for qualified::FunctionExpr {
 
     ctx.namespace.drop_qualified_name();
 
-    ensure!(
-      sig.rt == body.t,
-      "Return type and body type does not match: {:?} != {:?}",
-      sig.rt,
-      body.t,
-    );
+    if sig.rt != body.t {
+      return Err(TypecheckError::ReturnTypeAndBodyMismatch(sig.rt, body.t));
+    }
 
     Ok(TypedValue {
       v: FunctionExpr {
@@ -107,6 +129,8 @@ impl ProcessTypecheckerNode for qualified::StructDef {
   type R = Result<typed::StructDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let name = self.name;
     let args = self
       .args
@@ -138,16 +162,14 @@ impl ProcessTypecheckerNode for qualified::ValDef {
   type R = Result<typed::ValDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let name = self.name;
     let t = ctx.get_type(self.t)?;
     let expr = self.expr.process(ctx)?;
 
     if t != expr.t {
-      bail!(
-        "Declared type and value type does not match: {:?} != {:?}",
-        t,
-        expr.t,
-      );
+      return Err(TypecheckError::DeclTypeAndValTypeMismatch(t, expr.t));
     }
 
     ctx.values.insert(name.clone(), expr.t.clone());
@@ -172,6 +194,8 @@ impl ProcessTypecheckerNode for qualified::ClassDef {
   type R = Result<typed::ClassDef>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let name = self.name.clone();
     let methods = self
       .methods
@@ -200,14 +224,14 @@ impl ProcessTypecheckerNode for qualified::ImplDef {
       .impls
       .into_iter()
       .map(|i| {
-        FunctionExpr { f: i, closure: () }
+        qualified::FunctionExpr { f: i, closure: () }
           .process(ctx)
           .map(|i| i.v.f)
       })
       .collect::<Result<_, _>>()?;
 
     let Ok(class) = ctx.get_class(class_name.as_str()) else {
-      bail!("No class with name {}", class_name);
+      return Err(TypecheckError::NoClassWithName(class_name));
     };
 
     let mut class_sigs = class.methods;
@@ -218,7 +242,7 @@ impl ProcessTypecheckerNode for qualified::ImplDef {
     impl_sigs.sort_by_key(|m| m.name.clone());
 
     if class_sigs != impl_sigs {
-      bail!("Wrong implementations: {:?}, {:?}", class_sigs, impl_sigs,);
+      return Err(TypecheckError::WrongImplementations(class_sigs, impl_sigs));
     };
 
     for i in impls.clone() {
@@ -228,7 +252,7 @@ impl ProcessTypecheckerNode for qualified::ImplDef {
     ctx.type_impl = None;
 
     Ok(
-      ImplDef {
+      typed::ImplDef {
         class_name,
         t,
         impls,
@@ -242,54 +266,54 @@ impl ProcessTypecheckerNode for qualified::Expr {
   type R = CheckResult<typed::Expr>;
   fn process(self, ctx: &mut Typechecker) -> Self::R {
     match self {
-      Expr::BinOp(binop) => {
+      qualified::Expr::BinOp(binop) => {
         let TypedValue { v, t } = binop.process(ctx)?;
-        TypedValue::get(Expr::BinOp(Box::new(v)), t)
+        TypedValue::get(typed::Expr::BinOp(Box::new(v)), t)
       }
-      Expr::Lit(l) => {
+      qualified::Expr::Lit(l) => {
         let TypedValue { v, t } = l.process(ctx)?;
-        TypedValue::get(Expr::Lit(v), t)
+        TypedValue::get(typed::Expr::Lit(v), t)
       }
-      Expr::Value(name) => {
+      qualified::Expr::Value(name) => {
         let TypedValue { v, t } = name.process(ctx)?;
-        TypedValue::get(Expr::Value(v), t)
+        TypedValue::get(typed::Expr::Value(v), t)
       }
-      Expr::Assign(assign) => {
+      qualified::Expr::Assign(assign) => {
         let TypedValue { v, t } = assign.process(ctx)?;
-        TypedValue::get(Expr::Assign(Box::new(v)), t)
+        TypedValue::get(typed::Expr::Assign(Box::new(v)), t)
       }
-      Expr::Chain(chain) => {
+      qualified::Expr::Chain(chain) => {
         let TypedValue { v, t } = chain.process(ctx)?;
-        TypedValue::get(Expr::Chain(Box::new(v)), t)
+        TypedValue::get(typed::Expr::Chain(Box::new(v)), t)
       }
-      Expr::Function(function) => {
+      qualified::Expr::Function(function) => {
         let closure = ctx.closure_manager.clone();
         ctx.closure_manager.push_layer();
         let mut f = function.process(ctx)?;
         ctx.closure_manager.pop_layer();
         f.v.closure = closure;
-        TypedValue::get(Expr::Function(Box::new(f.v)), f.t)
+        TypedValue::get(typed::Expr::Function(Box::new(f.v)), f.t)
       }
-      Expr::Call(call) => call.process(ctx),
-      Expr::If(if_) => {
+      qualified::Expr::Call(call) => call.process(ctx),
+      qualified::Expr::If(if_) => {
         let TypedValue { v, t } = if_.process(ctx)?;
-        TypedValue::get(Expr::If(Box::new(v)), t)
+        TypedValue::get(typed::Expr::If(Box::new(v)), t)
       }
-      Expr::Attr(attr) => {
+      qualified::Expr::Attr(attr) => {
         let TypedValue { v, t } = attr.process(ctx)?;
-        TypedValue::get(Expr::Attr(v), t)
+        TypedValue::get(typed::Expr::Attr(v), t)
       }
-      Expr::New(new) => {
+      qualified::Expr::New(new) => {
         let TypedValue { v, t } = new.process(ctx)?;
-        TypedValue::get(Expr::New(v), t)
+        TypedValue::get(typed::Expr::New(v), t)
       }
-      Expr::StringTemplate(stringtemplate) => {
+      qualified::Expr::StringTemplate(stringtemplate) => {
         let TypedValue { v, t } = stringtemplate.process(ctx)?;
-        TypedValue::get(Expr::StringTemplate(v), t)
+        TypedValue::get(typed::Expr::StringTemplate(v), t)
       }
-      Expr::MethodCall(methodcall) => {
+      qualified::Expr::MethodCall(methodcall) => {
         let TypedValue { v, t } = methodcall.process(ctx)?;
-        TypedValue::get(Expr::MethodCall(Box::new(v)), t)
+        TypedValue::get(typed::Expr::MethodCall(Box::new(v)), t)
       }
     }
   }
@@ -299,23 +323,18 @@ impl ProcessTypecheckerNode for qualified::BinOpExpr {
   type R = CheckResult<typed::BinOpExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let lh = self.lh.process(ctx)?;
     let rh = self.rh.process(ctx)?;
 
-    ensure!(
-      lh.t == rh.t,
-      "Unequal binop types: {:?} != {:?}",
-      lh.t,
-      rh.t,
-    );
+    if lh.t != rh.t {
+      return Err(TypecheckError::UnequalBinopTypes(lh.t, rh.t));
+    }
 
     let (Type::Simple(lht), Type::Simple(rht)) = (lh.t.clone(), rh.t.clone())
     else {
-      bail!(
-        "Cannot run binary operation on functions: lh: {:?}, rh: {:?}",
-        lh.t,
-        rh.t,
-      );
+      return Err(TypecheckError::CannotBinopFunctions(lh.t, rh.t));
     };
 
     match (lht, self.op) {
@@ -349,12 +368,7 @@ impl ProcessTypecheckerNode for qualified::BinOpExpr {
         },
         Type::Simple(rht),
       ),
-      (lht, op) => Err(anyhow!(
-        "Invalid operation type: {:?} {:?} {:?}",
-        lht,
-        op,
-        rh.t
-      )),
+      (_, op) => Err(TypecheckError::InvalidBinopOperands(lh.t, op, rh.t)),
     }
   }
 }
@@ -363,6 +377,8 @@ impl ProcessTypecheckerNode for qualified::ChainExpr {
   type R = CheckResult<typed::ChainExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let lh = self.e1.process(ctx)?;
     let rh = self.e2.process(ctx)?;
 
@@ -374,6 +390,8 @@ impl ProcessTypecheckerNode for qualified::CallExpr {
   type R = CheckResult<typed::Expr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let (arg_values, arg_types): (Vec<typed::Expr>, Vec<typed::Type>) = self
       .args
       .into_iter()
@@ -389,22 +407,21 @@ impl ProcessTypecheckerNode for qualified::CallExpr {
     let no_of_args = arg_types.len();
 
     if exp_no_of_args < no_of_args {
-      bail!(
-        "Invalid number of arguments: expected: {:?}, actual: {:?}",
-        exp_arg_types.len(),
-        arg_types.len()
-      )
+      return Err(TypecheckError::InvalidNoOfFunArgs(
+        exp_no_of_args,
+        no_of_args,
+      ));
     }
 
     for (exp_arg_type, arg_type) in
       exp_arg_types.iter().zip::<Vec<typed::Type>>(arg_types)
     {
-      ensure!(
-        *exp_arg_type == arg_type,
-        "Invalid argument type: {:?} != {:?}",
-        exp_arg_type,
-        arg_type,
-      );
+      if *exp_arg_type != arg_type {
+        return Err(TypecheckError::InvalidFunArgType(
+          exp_arg_type.clone(),
+          arg_type,
+        ));
+      }
     }
 
     if exp_no_of_args == no_of_args {
@@ -479,17 +496,14 @@ impl ProcessTypecheckerNode for qualified::IfExpr {
   type R = CheckResult<typed::IfExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let be = self.if_.process(ctx)?;
     let e1 = self.then.process(ctx)?;
     let e2 = self.else_.process(ctx)?;
 
     if be.t != Type::Simple(SimpleType::Bool) || e1.t != e2.t {
-      bail!(
-        "Invalid if expression types: {:?} {:?} {:?}",
-        be.t,
-        e1.t,
-        e2.t
-      )
+      return Err(TypecheckError::InvalidIfExprTypes(be.t, e1.t, e2.t));
     };
 
     TypedValue::get(
@@ -507,14 +521,14 @@ impl ProcessTypecheckerNode for qualified::AttrExpr {
   type R = CheckResult<typed::AttrExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let struct_ = match (ctx.get_value(self.name.clone())?, &ctx.type_impl) {
       (Type::Simple(SimpleType::Struct(struct_)), _) => struct_,
       (Type::Simple(SimpleType::This), Some(SimpleType::Struct(struct_))) => {
         struct_.clone()
       }
-      _ => {
-        bail!("Struct `{}` does not exist.", self.name);
-      }
+      _ => return Err(TypecheckError::StructDoesNotExist(self.name)),
     };
 
     let Some(StructArg { type_, .. }) = struct_
@@ -523,11 +537,9 @@ impl ProcessTypecheckerNode for qualified::AttrExpr {
       .into_iter()
       .find(|arg| arg.name == self.attr)
     else {
-      bail!(
-        "Struct `{}` does not have attribute `{}`.",
-        self.name,
-        self.attr,
-      );
+      return Err(TypecheckError::StructAttrDoesNotExist(
+        self.name, self.attr,
+      ));
     };
 
     TypedValue::get(
@@ -546,13 +558,13 @@ impl ProcessTypecheckerNode for qualified::LitExpr {
 
   fn process(self, _ctx: &mut Typechecker) -> Self::R {
     let t = match self {
-      LitExpr::Int(_) => SimpleType::Int,
-      LitExpr::Bool(_) => SimpleType::Bool,
-      LitExpr::Float(_) => SimpleType::Float,
-      LitExpr::String(_) => SimpleType::String,
+      qualified::LitExpr::Int(_) => typed::SimpleType::Int,
+      qualified::LitExpr::Bool(_) => typed::SimpleType::Bool,
+      qualified::LitExpr::Float(_) => typed::SimpleType::Float,
+      qualified::LitExpr::String(_) => typed::SimpleType::String,
     };
 
-    TypedValue::get(self, Type::Simple(t))
+    TypedValue::get(self, typed::Type::Simple(t))
   }
 }
 
@@ -560,9 +572,11 @@ impl ProcessTypecheckerNode for qualified::ValueExpr {
   type R = CheckResult<typed::ValueExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let type_ = ctx.get_value(self.name.clone())?;
 
-    TypedValue::get(typed::ValueExpr { name: self.name }, type_)
+    TypedValue::get(ValueExpr { name: self.name }, type_)
   }
 }
 
@@ -570,15 +584,14 @@ impl ProcessTypecheckerNode for qualified::AssignExpr {
   type R = CheckResult<typed::AssignExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let type_ = ctx.get_type(self.type_)?;
     let expr = self.expr.process(ctx)?;
 
-    ensure!(
-      type_ == expr.t,
-      "Unequal assign types: {:?} != {:?}",
-      type_,
-      expr.t,
-    );
+    if type_ != expr.t {
+      return Err(TypecheckError::InvalidAssignTypes(type_, expr.t));
+    }
 
     ctx.values.insert(self.name.clone(), type_.clone());
     ctx.closure_manager.push(self.name.clone(), type_.clone());
@@ -598,6 +611,8 @@ impl ProcessTypecheckerNode for qualified::NewExpr {
   type R = CheckResult<typed::NewExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let args = self
       .args
       .into_iter()
@@ -622,6 +637,8 @@ impl ProcessTypecheckerNode for qualified::StringTemplateExpr {
   type R = CheckResult<typed::StringTemplateExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let mut typed_args = Vec::new();
     let mut types_by_value_map = HashMap::new();
 
@@ -660,6 +677,8 @@ impl ProcessTypecheckerNode for qualified::MethodCallExpr {
   type R = CheckResult<typed::MethodCallExpr>;
 
   fn process(self, ctx: &mut Typechecker) -> Self::R {
+    use typed::*;
+
     let this = self.this.process(ctx)?;
     let methodname = self.methodname;
     let args = self
@@ -671,7 +690,7 @@ impl ProcessTypecheckerNode for qualified::MethodCallExpr {
     let fs = ctx.get_impl_method(this.clone(), methodname.clone())?;
 
     let Type::Simple(t) = this.t else {
-      bail!("Only simple types can have methods: `{:?}`", this.t,);
+      return Err(TypecheckError::NonSimpleMethodType(this.t));
     };
 
     TypedValue::get(
@@ -696,11 +715,13 @@ pub struct Typechecker {
   closure_manager: ClosureManager,
   namespace: Namespace,
   module: qualified::Mod,
-  type_impl: Option<SimpleType>,
+  type_impl: Option<typed::SimpleType>,
 }
 
 impl Typechecker {
   pub fn create(m: qualified::Mod) -> Self {
+    use typed::*;
+
     Self {
       values: HashMap::new(),
       functions: HashMap::from([(
@@ -722,7 +743,7 @@ impl Typechecker {
   }
 
   pub fn create_empty() -> Self {
-    Self::create(Mod::default())
+    Self::create(qualified::Mod::default())
   }
 
   pub fn get_type_of_expr(
@@ -733,6 +754,8 @@ impl Typechecker {
   }
 
   fn get_struct(&self, name: String) -> Result<typed::StructDef> {
+    use typed::*;
+
     if let Some(args) = self.types.get(name.as_str()) {
       return Ok(StructDef {
         name: name.to_string(),
@@ -750,13 +773,15 @@ impl Typechecker {
       return Ok(s.clone());
     }
 
-    bail!("Cant find struct {}", name)
+    Err(TypecheckError::NoStructWithName(name))
   }
 
   fn get_function(
     &self,
     name: String,
   ) -> Result<(Vec<typed::Type>, typed::Type)> {
+    use typed::*;
+
     if let Some(f) = self.functions.get(name.as_str()) {
       return Ok(f.clone());
     }
@@ -769,10 +794,12 @@ impl Typechecker {
       return Ok((arg_types, rt));
     }
 
-    bail!("Cant find function {}", name)
+    Err(TypecheckError::NoFunWithName(name))
   }
 
   fn get_value(&self, name: String) -> Result<typed::Type> {
+    use typed::*;
+
     if let Some(ts) = self.values.get(name.as_str()) {
       return Ok(ts.clone());
     }
@@ -783,10 +810,12 @@ impl Typechecker {
       return Ok(ts.t.clone());
     }
 
-    bail!("Cant find value {}", name)
+    Err(TypecheckError::NoValWithName(name))
   }
 
   fn get_class(&self, name: &str) -> Result<typed::ClassDef> {
+    use typed::*;
+
     if let Some(c) = self.classes.get(name) {
       return Ok(c.clone());
     }
@@ -804,7 +833,7 @@ impl Typechecker {
       return Ok(c.clone());
     }
 
-    bail!("Cant find class {}", name)
+    Err(TypecheckError::NoClassWithName(name.into()))
   }
 
   fn get_impl_method(
@@ -812,8 +841,10 @@ impl Typechecker {
     this: TypedValue<typed::Expr, typed::Type>,
     method: String,
   ) -> Result<typed::FunSig> {
+    use typed::*;
+
     let Type::Simple(t) = &this.t else {
-      bail!("Functional types cannot have methods: {:?}", this.t);
+      return Err(TypecheckError::NonSimpleMethodType(this.t));
     };
 
     if let Some(m) = self.methods.get(t.get_method_name(&method).as_str()) {
@@ -834,10 +865,12 @@ impl Typechecker {
       return Ok(m.clone());
     };
 
-    bail!("No method `{}` defined for type `{:?}`.", method, this.t,);
+    Err(TypecheckError::NoMethodForType(method, this.t))
   }
 
-  fn get_simple_type(&self, t: String) -> Result<SimpleType> {
+  fn get_simple_type(&self, t: String) -> Result<typed::SimpleType> {
+    use typed::*;
+
     match t.as_str() {
       "Int" => Ok(SimpleType::Int),
       "Bool" => Ok(SimpleType::Bool),
@@ -853,18 +886,22 @@ impl Typechecker {
 
   fn get_type(&self, s: qualified::Type) -> Result<typed::Type> {
     match s {
-      Type::Function(ts) => {
+      qualified::Type::Function(ts) => {
         let ts = ts
           .into_iter()
           .map(|t| self.get_type(t))
           .collect::<Result<Vec<_>, _>>()?;
-        Ok(Type::Function(ts))
+        Ok(typed::Type::Function(ts))
       }
-      Type::Simple(s) => Ok(Type::Simple(self.get_simple_type(s)?)),
+      qualified::Type::Simple(s) => {
+        Ok(typed::Type::Simple(self.get_simple_type(s)?))
+      }
     }
   }
 
   pub fn check(&mut self) -> Result<typed::Mod> {
+    use typed::*;
+
     let name = self.module.name.clone();
     let defs = self.module.defs.clone().process(self)?;
     let imports = self.module.imports.clone();
@@ -881,6 +918,8 @@ impl Typechecker {
     fs: qualified::FunSig,
     sig_only: bool,
   ) -> CheckResult<typed::FunSig> {
+    use typed::*;
+
     let name = self.namespace.create_qualified_name(fs.name);
     let args = self.typecheck_fun_args(fs.args)?;
     let rt = self.get_type(fs.rt)?;
@@ -906,6 +945,8 @@ impl Typechecker {
     &mut self,
     args: Vec<qualified::FunArg>,
   ) -> CheckResult<Vec<typed::FunArg>, Vec<typed::Type>> {
+    use typed::*;
+
     let v = args
       .into_iter()
       .map(|arg| {
@@ -929,6 +970,7 @@ mod test {
   use rstest::*;
 
   use super::*;
+  use crate::library::ast::*;
 
   #[fixture]
   fn typechecker() -> Typechecker {

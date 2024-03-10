@@ -7,7 +7,14 @@ use syn::{
 
 struct DefineMap {
   from_name: Ident,
-  arg_t: Type,
+  argt: Type,
+  rt: Option<Type>,
+}
+
+struct DefineMapResult {
+  from_name: Ident,
+  errt: Type,
+  argt: Type,
   rt: Option<Type>,
 }
 
@@ -15,7 +22,7 @@ impl Parse for DefineMap {
   fn parse(input: ParseStream) -> Result<Self> {
     let from_name = input.parse()?;
     input.parse::<Token![,]>()?;
-    let arg_t = input.parse()?;
+    let argt = input.parse()?;
 
     let rt = {
       let lookahead = input.lookahead1();
@@ -32,14 +39,53 @@ impl Parse for DefineMap {
 
     Ok(Self {
       from_name,
-      arg_t,
+      argt,
       rt,
     })
   }
 }
+
+impl Parse for DefineMapResult {
+  fn parse(input: ParseStream) -> Result<Self> {
+    let from_name = input.parse()?;
+    input.parse::<Token![,]>()?;
+    let errt = input.parse()?;
+    input.parse::<Token![,]>()?;
+    let argt = input.parse()?;
+
+    let rt = {
+      let lookahead = input.lookahead1();
+
+      if input.is_empty() {
+        None
+      } else if lookahead.peek(Token![,]) {
+        input.parse::<Token![,]>()?;
+        Some(input.parse()?)
+      } else {
+        return Err(lookahead.error());
+      }
+    };
+
+    Ok(Self {
+      from_name,
+      errt,
+      argt,
+      rt,
+    })
+  }
+}
+
 struct DefineMapMacroArgs {
   from_name: Ident,
   to_name: Ident,
+  arg_t: Type,
+  rt: Type,
+}
+
+struct DefineMapResultMacroArgs {
+  from_name: Ident,
+  to_name: Ident,
+  err_t: Type,
   arg_t: Type,
   rt: Type,
 }
@@ -52,7 +98,7 @@ impl From<DefineMap> for DefineMapMacroArgs {
     } else {
       format_ident!("{}s", from_name)
     };
-    let arg_t = value.arg_t;
+    let arg_t = value.argt;
     let rt = match value.rt {
       Some(rt) => rt,
       None => arg_t.clone(),
@@ -60,6 +106,30 @@ impl From<DefineMap> for DefineMapMacroArgs {
     Self {
       from_name,
       to_name,
+      arg_t,
+      rt,
+    }
+  }
+}
+
+impl From<DefineMapResult> for DefineMapResultMacroArgs {
+  fn from(value: DefineMapResult) -> Self {
+    let from_name = value.from_name;
+    let to_name = if from_name.to_string().ends_with('s') {
+      format_ident!("{}es", from_name)
+    } else {
+      format_ident!("{}s", from_name)
+    };
+    let err_t = value.errt;
+    let arg_t = value.argt;
+    let rt = match value.rt {
+      Some(rt) => rt,
+      None => arg_t.clone(),
+    };
+    Self {
+      from_name,
+      to_name,
+      err_t,
       arg_t,
       rt,
     }
@@ -90,10 +160,11 @@ pub fn define_map(input: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn define_map_result(input: TokenStream) -> TokenStream {
-  let input = parse_macro_input!(input as DefineMap);
-  let DefineMapMacroArgs {
+  let input = parse_macro_input!(input as DefineMapResult);
+  let DefineMapResultMacroArgs {
     from_name,
     to_name,
+    err_t,
     arg_t,
     rt,
   } = input.into();
@@ -102,7 +173,7 @@ pub fn define_map_result(input: TokenStream) -> TokenStream {
     fn #to_name(
       &self,
       es: Vec<#arg_t>,
-    ) -> Result<Vec<#rt>> {
+    ) -> Result<Vec<#rt>, #err_t> {
       es.into_iter().map(|e| self.#from_name(e)).collect()
     }
   };
